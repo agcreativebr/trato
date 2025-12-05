@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #__next {
+	height: 100%;
+}
+
+body {
+	@apply bg-neutral-50 text-neutral-900;
+}
+
+/* Scrollbar suave */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: #d4d4d8 transparent;
+}
+*::-webkit-scrollbar {
+	height: 8px;
+	width: 8px;
+}
+*::-webkit-scrollbar-thumb {
+	background: #d4d4d8;
+	border-radius: 9999px;
+}
+*::-webkit-scrollbar-track {
+	background: transparent;
+}
+
