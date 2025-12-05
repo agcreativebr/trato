@@ -19,6 +19,10 @@ import { RichEditor } from "@/components/ui/RichEditor";
 import { Popover } from "@/components/ui/Popover";
 import { Lightbox } from "@/components/ui/Lightbox";
 
+// cache simples para URLs assinadas (evita sumiço da capa ao abrir o modal)
+const signedUrlCache: Map<string, { url: string; expiresAt: number }> =
+  new Map();
+
 type Label = { id: string; board_id: string; name: string; color: string };
 type Checklist = { id: string; card_id: string; title: string };
 type ChecklistItem = {
@@ -112,10 +116,21 @@ export function CardModal({
       setMoveListId(card?.list_id ?? null);
       setCoverSize((card?.cover_size as any) ?? "small");
       if (card?.cover_path) {
+        const now = Date.now();
+        const cached = signedUrlCache.get(card.cover_path);
+        if (cached && cached.expiresAt > now) {
+          setCoverUrl(cached.url);
+        }
         const { data: s } = await supabase.storage
           .from("attachments")
           .createSignedUrl(card.cover_path, 60 * 10);
-        setCoverUrl(s?.signedUrl ?? null);
+        if (s?.signedUrl) {
+          signedUrlCache.set(card.cover_path, {
+            url: s.signedUrl,
+            expiresAt: now + 10 * 60 * 1000 - 30 * 1000,
+          });
+        }
+        setCoverUrl(s?.signedUrl ?? cached?.url ?? null);
       } else {
         setCoverUrl(null);
       }
@@ -556,7 +571,7 @@ export function CardModal({
                         start_date: toIso(v.start),
                         due_date: toIso(v.due),
                         recurrence: v.recurrence,
-                        reminder_minutes: v.reminder,
+                        reminder_minutes: v.reminder === "" ? null : v.reminder,
                       };
                       await supabase
                         .from("cards")
@@ -848,13 +863,25 @@ function DatesInline({
     reminder: number | "";
   }) => Promise<void> | void;
 }) {
+  function toLocalInput(iso: string) {
+    const d = new Date(iso);
+    const off = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - off * 60000);
+    return local.toISOString().slice(0, 16);
+  }
+  function nowLocalInput() {
+    const d = new Date();
+    const off = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - off * 60000);
+    return local.toISOString().slice(0, 16);
+  }
   const [startEnabled, setStartEnabled] = useState(!!startValue);
   const [dueEnabled, setDueEnabled] = useState(!!dueValue);
   const [start, setStart] = useState<string>(
-    startValue ? new Date(startValue).toISOString().slice(0, 16) : ""
+    startValue ? toLocalInput(startValue) : ""
   );
   const [due, setDue] = useState<string>(
-    dueValue ? new Date(dueValue).toISOString().slice(0, 16) : ""
+    dueValue ? toLocalInput(dueValue) : ""
   );
   const [rec, setRec] = useState<"none" | "daily" | "weekly" | "monthly">(
     recurrence ?? "none"
@@ -862,19 +889,30 @@ function DatesInline({
   const [rem, setRem] = useState<number | "">(reminder ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const startRef = useRef<HTMLInputElement | null>(null);
+  const dueRef = useRef<HTMLInputElement | null>(null);
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <input
           type="checkbox"
           checked={startEnabled}
-          onChange={(e) => setStartEnabled(e.target.checked)}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            setStartEnabled(checked);
+            if (checked && !start) setStart(nowLocalInput());
+            setTimeout(() => {
+              (startRef.current as any)?.showPicker?.();
+              startRef.current?.focus();
+            }, 0);
+          }}
         />
         <label className="text-sm w-28">Data de início</label>
         <input
           type="datetime-local"
           className="border rounded px-2 py-1 flex-1"
           disabled={!startEnabled}
+          ref={startRef}
           value={start}
           onChange={(e) => setStart(e.target.value)}
         />
@@ -883,13 +921,22 @@ function DatesInline({
         <input
           type="checkbox"
           checked={dueEnabled}
-          onChange={(e) => setDueEnabled(e.target.checked)}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            setDueEnabled(checked);
+            if (checked && !due) setDue(nowLocalInput());
+            setTimeout(() => {
+              (dueRef.current as any)?.showPicker?.();
+              dueRef.current?.focus();
+            }, 0);
+          }}
         />
         <label className="text-sm w-28">Data de entrega</label>
         <input
           type="datetime-local"
           className="border rounded px-2 py-1 flex-1"
           disabled={!dueEnabled}
+          ref={dueRef}
           value={due}
           onChange={(e) => setDue(e.target.value)}
         />
