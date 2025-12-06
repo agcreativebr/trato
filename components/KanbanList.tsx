@@ -7,6 +7,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
 import { Plus, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import * as React from "react";
@@ -40,21 +42,38 @@ export function KanbanList({
   const btnRef = React.useRef<HTMLButtonElement | null>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [targetList, setTargetList] = React.useState<string | null>(null);
+  // sortable para mover a lista horizontalmente
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSortableRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `container:${list.id}` });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.9 : 1,
+  };
   return (
     <motion.div
-      ref={setNodeRef as React.Ref<HTMLDivElement>}
+      ref={setSortableRef as React.Ref<HTMLDivElement>}
+      {...attributes}
+      {...listeners}
+      style={style}
       className={`w-80 min-w-[20rem] bg-white/90 backdrop-blur border ${
         isOver ? "border-blue-400" : "border-neutral-200"
-      } rounded-xl p-3 shadow-sm hover:shadow-md transition`}
+      } rounded-xl p-3 shadow-elevated hover:shadow-floating transition-all duration-250 ease-soft`}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
     >
       <div className="flex items-center justify-between mb-2">
-        <h3 className="font-medium">{list.name}</h3>
+        <h3 className="font-medium tracking-tight">{list.name}</h3>
         <div className="flex items-center gap-2">
           <button
             onClick={onAddCard}
-            className="text-xs inline-flex items-center gap-1 px-2 py-1 rounded-md bg-neutral-100 hover:bg-neutral-200 transition"
+            className="text-xs inline-flex items-center gap-1 px-2 py-1 rounded-md bg-neutral-100 hover:bg-neutral-200 transition-colors"
           >
             <Plus size={14} />
             Novo
@@ -68,7 +87,7 @@ export function KanbanList({
           </button>
         </div>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2" ref={setNodeRef as React.Ref<HTMLDivElement>}>
         <SortableContext
           items={cards.map((c) => `${list.id}:${c.id}`)}
           strategy={verticalListSortingStrategy}

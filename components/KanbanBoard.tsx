@@ -22,6 +22,7 @@ import { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { Plus } from "lucide-react";
 import { CardModal } from "@/components/card/CardModal";
 import { AvatarStack } from "@/components/ui/Avatar";
+import { setCachedSignedUrl } from "@/lib/storage-url-cache";
 
 export type Card = {
   id: string;
@@ -133,6 +134,24 @@ export function KanbanBoard({
         map[l.id] = (cs ?? []).filter((c) => c.list_id === l.id);
       }
       setCardsByList(map);
+      // Prefetch das capas para evitar latência ao abrir modal
+      const coverPaths = (cs ?? [])
+        .map((c: any) => c.cover_path)
+        .filter(Boolean) as string[];
+      if (coverPaths.length) {
+        try {
+          await Promise.all(
+            coverPaths.map(async (p) => {
+              const { data: one } = await supabase.storage
+                .from("attachments")
+                .createSignedUrl(p, 60 * 10);
+              if (one?.signedUrl) {
+                setCachedSignedUrl(p, one.signedUrl, 600);
+              }
+            })
+          );
+        } catch {}
+      }
 
       // fetch members for all cards
       const cardIds = (cs ?? []).map((c) => c.id);
@@ -443,6 +462,30 @@ export function KanbanBoard({
     if (!over) return;
     const activeId = String(active.id); // format: <listId>:<cardId>
     const overId = String(over.id); // pode ser list:<listId> OU <listId>:<cardId>
+    // Reordenar listas
+    if (activeId.startsWith("container:") && overId.startsWith("container:")) {
+      const fromListId = activeId.replace("container:", "");
+      const toListId = overId.replace("container:", "");
+      if (fromListId !== toListId) {
+        const fromIndex = lists.findIndex((l) => l.id === fromListId);
+        const toIndex = lists.findIndex((l) => l.id === toListId);
+        if (fromIndex >= 0 && toIndex >= 0) {
+          const next = [...lists];
+          const [moved] = next.splice(fromIndex, 1);
+          next.splice(toIndex, 0, moved);
+          setLists(next);
+          const prevPos = toIndex > 0 ? next[toIndex - 1].position : undefined;
+          const nextPos =
+            toIndex < next.length - 1 ? next[toIndex + 1].position : undefined;
+          const newPos = computePosition(prevPos, nextPos);
+          await supabase
+            .from("lists")
+            .update({ position: newPos })
+            .eq("id", moved.id);
+        }
+      }
+      return;
+    }
     const activeParts = activeId.split(":");
     const fromListId = activeParts[0];
     const cardId = activeParts[1];
@@ -506,7 +549,7 @@ export function KanbanBoard({
       >
         <div className="flex items-start gap-4">
           <SortableContext
-            items={lists.map((l) => l.id)}
+            items={lists.map((l) => `container:${l.id}`)}
             strategy={horizontalListSortingStrategy}
           >
             {lists.map((l) => (

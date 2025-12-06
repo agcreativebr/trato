@@ -8,10 +8,10 @@ import { Calendar, Paperclip, FileText, MessageSquare } from "lucide-react";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { useEffect } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-client";
-
-// cache simples para URLs assinadas da Storage (evita sumir imagem ao remontar)
-const signedUrlCache: Map<string, { url: string; expiresAt: number }> =
-  new Map();
+import {
+  getCachedSignedUrl,
+  setCachedSignedUrl,
+} from "@/lib/storage-url-cache";
 
 export function KanbanCard({
   card,
@@ -61,25 +61,18 @@ export function KanbanCard({
         return;
       }
       // 1) tenta cache imediato para evitar flicker
-      const now = Date.now();
-      const cached = signedUrlCache.get(card.cover_path);
-      if (cached && cached.expiresAt > now) {
-        if (active) setCoverUrl(cached.url);
+      const cached = getCachedSignedUrl(card.cover_path);
+      if (cached) {
+        if (active) setCoverUrl(cached);
       }
       // 2) renova se não houver cache ou se estiver perto de expirar
-      if (!cached || cached.expiresAt - now < 60_000) {
+      if (!cached) {
         const supabase = getSupabaseBrowserClient();
         const { data } = await supabase.storage
           .from("attachments")
           .createSignedUrl(card.cover_path, 60 * 10);
         const url = data?.signedUrl ?? null;
-        if (url) {
-          signedUrlCache.set(card.cover_path, {
-            url,
-            // assume TTL ~10min; guarda com margem de 30s
-            expiresAt: now + 10 * 60 * 1000 - 30 * 1000,
-          });
-        }
+        if (url) setCachedSignedUrl(card.cover_path, url, 600);
         if (active) setCoverUrl(url);
       }
     })();
@@ -112,8 +105,10 @@ export function KanbanCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`bg-white border border-neutral-200 rounded-lg shadow-sm hover:shadow-md transition ${
-        isOverlay ? "scale-[1.02] shadow-lg ring-1 ring-neutral-300" : ""
+      className={`bg-white border border-neutral-200 rounded-lg shadow-elevated hover:shadow-floating transition-all duration-250 ease-soft ${
+        isOverlay
+          ? "scale-[1.02] shadow-lg ring-1 ring-neutral-300"
+          : "hover:-translate-y-[1px]"
       }`}
     >
       {coverUrl && (
@@ -130,7 +125,7 @@ export function KanbanCard({
         </div>
       )}
       <div className="p-3">
-        <div className="font-medium">{card.title}</div>
+        <div className="font-medium tracking-tight">{card.title}</div>
         {(card.start_date || card.due_date) &&
           renderDateBadge(card, dueSoonThresholdMinutes)}
         <div className="mt-2 flex items-center justify-between">

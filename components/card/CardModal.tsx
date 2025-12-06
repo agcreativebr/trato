@@ -18,6 +18,10 @@ import TextareaAutosize from "react-textarea-autosize";
 import { RichEditor } from "@/components/ui/RichEditor";
 import { Popover } from "@/components/ui/Popover";
 import { Lightbox } from "@/components/ui/Lightbox";
+import {
+  getCachedSignedUrl,
+  setCachedSignedUrl,
+} from "@/lib/storage-url-cache";
 
 // cache simples para URLs assinadas (evita sumiço da capa ao abrir o modal)
 const signedUrlCache: Map<string, { url: string; expiresAt: number }> =
@@ -120,21 +124,18 @@ export function CardModal({
       setMoveListId(card?.list_id ?? null);
       setCoverSize((card?.cover_size as any) ?? "small");
       if (card?.cover_path) {
-        const now = Date.now();
-        const cached = signedUrlCache.get(card.cover_path);
-        if (cached && cached.expiresAt > now) {
-          setCoverUrl(cached.url);
+        const cached = getCachedSignedUrl(card.cover_path);
+        if (cached) {
+          setCoverUrl(cached);
+        } else {
+          const { data: s } = await supabase.storage
+            .from("attachments")
+            .createSignedUrl(card.cover_path, 60 * 10);
+          if (s?.signedUrl) {
+            setCachedSignedUrl(card.cover_path, s.signedUrl, 600);
+          }
+          setCoverUrl(s?.signedUrl ?? null);
         }
-        const { data: s } = await supabase.storage
-          .from("attachments")
-          .createSignedUrl(card.cover_path, 60 * 10);
-        if (s?.signedUrl) {
-          signedUrlCache.set(card.cover_path, {
-            url: s.signedUrl,
-            expiresAt: now + 10 * 60 * 1000 - 30 * 1000,
-          });
-        }
-        setCoverUrl(s?.signedUrl ?? cached?.url ?? null);
       } else {
         setCoverUrl(null);
       }
