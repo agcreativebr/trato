@@ -86,6 +86,10 @@ export function CardModal({
 
   useEffect(() => {
     if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
     let mounted = true;
     (async () => {
       setLoading(true);
@@ -170,6 +174,7 @@ export function CardModal({
     })();
     return () => {
       mounted = false;
+      window.removeEventListener("keydown", onKey);
     };
   }, [open, cardId, boardId, supabase]);
 

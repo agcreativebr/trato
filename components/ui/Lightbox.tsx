@@ -1,3 +1,4 @@
+"use client";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
@@ -13,6 +14,31 @@ export function Lightbox({
   src?: string | null;
   alt?: string;
 }) {
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    // Usa captura para executar ANTES de outros handlers (ex.: modal)
+    // e evitar que o modal feche antes da lightbox.
+    const onKeyCapture = (e: Event) => {
+      const kev = e as KeyboardEvent;
+      if (kev.key === "Escape") {
+        kev.preventDefault();
+        // impede outros handlers (incluindo do modal) de rodarem
+        // garantindo que a lightbox feche primeiro
+        // @ts-ignore - método existe no Event
+        kev.stopImmediatePropagation?.();
+        kev.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyCapture, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", onKeyCapture, {
+        capture: true,
+      } as any);
+  }, [open, onClose]);
   if (!open || !src) return null;
   return createPortal(
     <div className="fixed inset-0 z-[9999]">
