@@ -5,7 +5,7 @@ import {
   DragEndEvent,
   DragStartEvent,
   PointerSensor,
-  closestCenter,
+  rectIntersection,
   useSensor,
   useSensors,
   DragOverlay,
@@ -65,7 +65,7 @@ export function KanbanBoard({
   const [lists, setLists] = useState<List[]>([]);
   const [cardsByList, setCardsByList] = useState<Record<string, Card[]>>({});
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } })
   );
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [membersByCard, setMembersByCard] = useState<
@@ -89,6 +89,8 @@ export function KanbanBoard({
     Record<string, { id: string; name: string; color: string }[]>
   >({});
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [overListId, setOverListId] = useState<string | null>(null);
+  const [draggingListId, setDraggingListId] = useState<string | null>(null);
   const activeOverlay = useMemo(() => {
     if (!activeDragId) return null;
     const [lId, cId] = activeDragId.split(":");
@@ -453,15 +455,64 @@ export function KanbanBoard({
   }
 
   function onDragStart(event: DragStartEvent) {
-    setActiveDragId(String(event.active.id));
+    const id = String(event.active.id);
+    setActiveDragId(id);
+    if (id.startsWith("container:")) {
+      setDraggingListId(id.replace("container:", ""));
+    }
+  }
+
+  function onDragOver(event: any) {
+    const overId = event.over?.id ? String(event.over.id) : null;
+    const activeId = event.active?.id ? String(event.active.id) : null;
+    if (!overId || !activeId) return;
+    if (activeId.startsWith("container:")) {
+      let toListId = overId;
+      if (overId.startsWith("container:"))
+        toListId = overId.replace("container:", "");
+      else if (overId.startsWith("list:"))
+        toListId = overId.replace("list:", "");
+      setOverListId(toListId);
+    } else {
+      setOverListId(null);
+    }
   }
 
   async function onDragEnd(event: DragEndEvent) {
     setActiveDragId(null);
+    setDraggingListId(null);
+    setOverListId(null);
     const { active, over } = event;
     if (!over) return;
     const activeId = String(active.id); // format: <listId>:<cardId>
     const overId = String(over.id); // pode ser list:<listId> OU <listId>:<cardId>
+    // Reordenar listas (mesmo quando over é o droppable interno da lista)
+    if (activeId.startsWith("container:")) {
+      const fromListId = activeId.replace("container:", "");
+      let toListId = overId;
+      if (overId.startsWith("container:"))
+        toListId = overId.replace("container:", "");
+      else if (overId.startsWith("list:"))
+        toListId = overId.replace("list:", "");
+      else toListId = overId;
+      if (!toListId || fromListId === toListId) return;
+      const fromIndex = lists.findIndex((l) => l.id === fromListId);
+      const toIndex = lists.findIndex((l) => l.id === toListId);
+      if (fromIndex < 0 || toIndex < 0) return;
+      const next = [...lists];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      setLists(next);
+      const prevPos = toIndex > 0 ? next[toIndex - 1].position : undefined;
+      const nextPos =
+        toIndex < next.length - 1 ? next[toIndex + 1].position : undefined;
+      const newPos = computePosition(prevPos, nextPos);
+      await supabase
+        .from("lists")
+        .update({ position: newPos })
+        .eq("id", moved.id);
+      return;
+    }
     // Reordenar listas
     if (activeId.startsWith("container:") && overId.startsWith("container:")) {
       const fromListId = activeId.replace("container:", "");
@@ -489,16 +540,25 @@ export function KanbanBoard({
     const activeParts = activeId.split(":");
     const fromListId = activeParts[0];
     const cardId = activeParts[1];
-    const toListId = overId.startsWith("list:")
-      ? overId.replace("list:", "")
-      : overId.split(":")[0];
+    let toListId: string;
+    if (overId.startsWith("list:")) {
+      toListId = overId.replace("list:", "");
+    } else if (overId.startsWith("container:")) {
+      // quando o alvo é o container externo da lista (sortable das listas)
+      toListId = overId.replace("container:", "");
+    } else {
+      // formato <listId>:<cardId>
+      toListId = overId.split(":")[0];
+    }
+    // sanity: garante que é uma lista válida
+    if (!lists.some((l) => l.id === toListId)) return;
     const targetListCards = (cardsByList[toListId] ?? []).filter(
       (c) => c.id !== cardId
     );
 
     // índice de inserção: se estiver sobre um card, antes dele; se sobre a lista, no final
     let insertIndex = targetListCards.length;
-    if (!overId.startsWith("list:")) {
+    if (!overId.startsWith("list:") && !overId.startsWith("container:")) {
       const overCardId = overId.split(":")[1];
       const idx = targetListCards.findIndex((c) => c.id === overCardId);
       if (idx >= 0) insertIndex = idx;
@@ -512,39 +572,51 @@ export function KanbanBoard({
         : undefined;
     const newPos = computePosition(prevPos, nextPos);
 
-    // UI otimista
-    setCardsByList((prev) => {
-      const copy: Record<string, Card[]> = {};
-      for (const k of Object.keys(prev)) copy[k] = [...(prev[k] ?? [])];
-      // remove do antigo
-      for (const k of Object.keys(copy)) {
-        copy[k] = (copy[k] ?? []).filter((c) => c.id !== cardId);
-      }
-      // pega dados do card para manter metadados
-      let moved: Card | undefined;
-      const fromArr = prev[fromListId] ?? [];
-      moved = fromArr.find((c) => c.id === cardId);
-      if (!moved) return prev;
-      const newCard: Card = { ...moved, list_id: toListId, position: newPos };
-      const arr = copy[toListId] ?? [];
-      arr.splice(insertIndex, 0, newCard);
-      copy[toListId] = arr;
-      return copy;
-    });
+    // UI otimista com possibilidade de rollback
+    const prevState = cardsByList;
+    const nextState: Record<string, Card[]> = {};
+    for (const k of Object.keys(prevState))
+      nextState[k] = [...(prevState[k] ?? [])];
+    // remove do antigo
+    for (const k of Object.keys(nextState)) {
+      nextState[k] = (nextState[k] ?? []).filter((c) => c.id !== cardId);
+    }
+    // pega dados do card para manter metadados
+    const moved = (prevState[fromListId] ?? []).find((c) => c.id === cardId);
+    if (!moved) return;
+    const newCard: Card = { ...moved, list_id: toListId, position: newPos };
+    const arr = nextState[toListId] ?? [];
+    arr.splice(insertIndex, 0, newCard);
+    nextState[toListId] = arr;
+    setCardsByList(nextState);
 
-    // atualiza no banco em background
-    supabase
-      .from("cards")
-      .update({ list_id: toListId, position: newPos })
-      .eq("id", cardId);
+    // persistência via API (service role) — evita bloqueios de RLS
+    try {
+      const res = await fetch("/api/cards/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: cardId,
+          list_id: toListId,
+          position: newPos,
+        }),
+      });
+      if (!res.ok) {
+        // rollback se falhar
+        setCardsByList(prevState);
+      }
+    } catch {
+      setCardsByList(prevState);
+    }
   }
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-6 px-6">
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={rectIntersection}
         onDragStart={onDragStart}
+        onDragOver={onDragOver}
         onDragEnd={onDragEnd}
       >
         <div className="flex items-start gap-4">
@@ -553,147 +625,154 @@ export function KanbanBoard({
             strategy={horizontalListSortingStrategy}
           >
             {lists.map((l) => (
-              <KanbanList
-                key={l.id}
-                list={l}
-                cards={
-                  (cardsByList[l.id] ?? []).map((c) => ({
-                    ...c,
-                    onOpen: () => setOpenCardId(c.id),
-                    members: membersByCard[c.id] ?? [],
-                    labels: labelsByCard[c.id] ?? [],
-                    attachmentsCount: attachmentsCountByCard[c.id] ?? 0,
-                    commentsCount: commentsCountByCard[c.id] ?? 0,
-                  })) as any
-                }
-                onAddCard={() => addCard(l.id)}
-                allLists={lists}
-                onMoveList={async (dir) => {
-                  const idx = lists.findIndex((x) => x.id === l.id);
-                  const swapIdx = dir === "left" ? idx - 1 : idx + 1;
-                  if (swapIdx < 0 || swapIdx >= lists.length) return;
-                  const a = lists[idx];
-                  const b = lists[swapIdx];
-                  // UI otimista
-                  setLists((prev) => {
-                    const copy = [...prev];
-                    copy[idx] = b;
-                    copy[swapIdx] = a;
-                    return copy;
-                  });
-                  // troca posições no banco
-                  await Promise.all([
-                    supabase
-                      .from("lists")
-                      .update({ position: b.position })
-                      .eq("id", a.id),
-                    supabase
-                      .from("lists")
-                      .update({ position: a.position })
-                      .eq("id", b.id),
-                  ]);
-                }}
-                onCopyList={async () => {
-                  const name = `${l.name} (Cópia)`;
-                  const maxPos = lists.length
-                    ? Math.max(...lists.map((x) => x.position))
-                    : 0;
-                  const { data: newList } = await supabase
-                    .from("lists")
-                    .insert({
-                      name,
-                      board_id: l.board_id,
-                      position: maxPos + 100,
-                    })
-                    .select("*")
-                    .single();
-                  const cards = cardsByList[l.id] ?? [];
-                  for (let i = 0; i < cards.length; i++) {
-                    const c = cards[i];
-                    await supabase.from("cards").insert({
-                      title: c.title,
-                      description: c.description,
-                      board_id: c.board_id,
-                      list_id: (newList as any).id,
-                      position: (i + 1) * 100,
-                      due_date: c.due_date,
-                      start_date: c.start_date,
-                    });
+              <>
+                {draggingListId && overListId === l.id && (
+                  <div className="w-80 min-w-[20rem] rounded-xl border-2 border-dashed border-sky-400 bg-sky-100/30 h-12 self-stretch" />
+                )}
+                <KanbanList
+                  key={l.id}
+                  list={l}
+                  cards={
+                    (cardsByList[l.id] ?? []).map((c) => ({
+                      ...c,
+                      onOpen: () => setOpenCardId(c.id),
+                      members: membersByCard[c.id] ?? [],
+                      labels: labelsByCard[c.id] ?? [],
+                      attachmentsCount: attachmentsCountByCard[c.id] ?? 0,
+                      commentsCount: commentsCountByCard[c.id] ?? 0,
+                    })) as any
                   }
-                }}
-                onMoveAllCards={async (targetListId) => {
-                  const fromCards = (cardsByList[l.id] ?? [])
-                    .slice()
-                    .sort((a, b) => a.position - b.position);
-                  // UI otimista
-                  setCardsByList((prev) => {
-                    const copy: Record<string, Card[]> = {};
-                    for (const k of Object.keys(prev))
-                      copy[k] = [...(prev[k] ?? [])];
-                    const moving = copy[l.id] ?? [];
-                    copy[targetListId] = [
-                      ...(copy[targetListId] ?? []),
-                      ...moving.map((c, i) => ({
+                  onAddCard={() => addCard(l.id)}
+                  allLists={lists}
+                  onMoveList={async (dir) => {
+                    const idx = lists.findIndex((x) => x.id === l.id);
+                    const swapIdx = dir === "left" ? idx - 1 : idx + 1;
+                    if (swapIdx < 0 || swapIdx >= lists.length) return;
+                    const a = lists[idx];
+                    const b = lists[swapIdx];
+                    // UI otimista
+                    setLists((prev) => {
+                      const copy = [...prev];
+                      copy[idx] = b;
+                      copy[swapIdx] = a;
+                      return copy;
+                    });
+                    // troca posições no banco
+                    await Promise.all([
+                      supabase
+                        .from("lists")
+                        .update({ position: b.position })
+                        .eq("id", a.id),
+                      supabase
+                        .from("lists")
+                        .update({ position: a.position })
+                        .eq("id", b.id),
+                    ]);
+                  }}
+                  onCopyList={async () => {
+                    const name = `${l.name} (Cópia)`;
+                    const maxPos = lists.length
+                      ? Math.max(...lists.map((x) => x.position))
+                      : 0;
+                    const { data: newList } = await supabase
+                      .from("lists")
+                      .insert({
+                        name,
+                        board_id: l.board_id,
+                        position: maxPos + 100,
+                      })
+                      .select("*")
+                      .single();
+                    const cards = cardsByList[l.id] ?? [];
+                    for (let i = 0; i < cards.length; i++) {
+                      const c = cards[i];
+                      await supabase.from("cards").insert({
+                        title: c.title,
+                        description: c.description,
+                        board_id: c.board_id,
+                        list_id: (newList as any).id,
+                        position: (i + 1) * 100,
+                        due_date: c.due_date,
+                        start_date: c.start_date,
+                      });
+                    }
+                  }}
+                  onMoveAllCards={async (targetListId) => {
+                    const fromCards = (cardsByList[l.id] ?? [])
+                      .slice()
+                      .sort((a, b) => a.position - b.position);
+                    // UI otimista
+                    setCardsByList((prev) => {
+                      const copy: Record<string, Card[]> = {};
+                      for (const k of Object.keys(prev))
+                        copy[k] = [...(prev[k] ?? [])];
+                      const moving = copy[l.id] ?? [];
+                      copy[targetListId] = [
+                        ...(copy[targetListId] ?? []),
+                        ...moving.map((c, i) => ({
+                          ...c,
+                          list_id: targetListId,
+                          position: (i + 1) * 100,
+                        })),
+                      ];
+                      copy[l.id] = [];
+                      return copy;
+                    });
+                    for (let i = 0; i < fromCards.length; i++) {
+                      await supabase
+                        .from("cards")
+                        .update({
+                          list_id: targetListId,
+                          position: (i + 1) * 100,
+                        })
+                        .eq("id", fromCards[i].id);
+                    }
+                  }}
+                  onSortList={async (mode) => {
+                    const cards = (cardsByList[l.id] ?? []).slice();
+                    if (mode === "created")
+                      cards.sort(
+                        (a: any, b: any) =>
+                          new Date(a.created_at).getTime() -
+                          new Date(b.created_at).getTime()
+                      );
+                    if (mode === "due")
+                      cards.sort(
+                        (a: any, b: any) =>
+                          (a.due_date
+                            ? new Date(a.due_date).getTime()
+                            : Infinity) -
+                          (b.due_date
+                            ? new Date(b.due_date).getTime()
+                            : Infinity)
+                      );
+                    // UI otimista
+                    setCardsByList((prev) => ({
+                      ...prev,
+                      [l.id]: cards.map((c, i) => ({
                         ...c,
-                        list_id: targetListId,
                         position: (i + 1) * 100,
                       })),
-                    ];
-                    copy[l.id] = [];
-                    return copy;
-                  });
-                  for (let i = 0; i < fromCards.length; i++) {
-                    await supabase
-                      .from("cards")
-                      .update({
-                        list_id: targetListId,
-                        position: (i + 1) * 100,
-                      })
-                      .eq("id", fromCards[i].id);
-                  }
-                }}
-                onSortList={async (mode) => {
-                  const cards = (cardsByList[l.id] ?? []).slice();
-                  if (mode === "created")
-                    cards.sort(
-                      (a: any, b: any) =>
-                        new Date(a.created_at).getTime() -
-                        new Date(b.created_at).getTime()
-                    );
-                  if (mode === "due")
-                    cards.sort(
-                      (a: any, b: any) =>
-                        (a.due_date
-                          ? new Date(a.due_date).getTime()
-                          : Infinity) -
-                        (b.due_date ? new Date(b.due_date).getTime() : Infinity)
-                    );
-                  // UI otimista
-                  setCardsByList((prev) => ({
-                    ...prev,
-                    [l.id]: cards.map((c, i) => ({
-                      ...c,
-                      position: (i + 1) * 100,
-                    })),
-                  }));
-                  // persistir
-                  for (let i = 0; i < cards.length; i++) {
-                    await supabase
-                      .from("cards")
-                      .update({ position: (i + 1) * 100 })
-                      .eq("id", cards[i].id);
-                  }
-                }}
-                onArchiveList={async () => {
-                  if (!confirm("Arquivar esta lista e seus cartões?")) return;
-                  // remove cartões primeiro
-                  const cards = cardsByList[l.id] ?? [];
-                  for (const c of cards) {
-                    await supabase.from("cards").delete().eq("id", c.id);
-                  }
-                  await supabase.from("lists").delete().eq("id", l.id);
-                }}
-              />
+                    }));
+                    // persistir
+                    for (let i = 0; i < cards.length; i++) {
+                      await supabase
+                        .from("cards")
+                        .update({ position: (i + 1) * 100 })
+                        .eq("id", cards[i].id);
+                    }
+                  }}
+                  onArchiveList={async () => {
+                    if (!confirm("Arquivar esta lista e seus cartões?")) return;
+                    // remove cartões primeiro
+                    const cards = cardsByList[l.id] ?? [];
+                    for (const c of cards) {
+                      await supabase.from("cards").delete().eq("id", c.id);
+                    }
+                    await supabase.from("lists").delete().eq("id", l.id);
+                  }}
+                />
+              </>
             ))}
           </SortableContext>
           <button
@@ -705,7 +784,16 @@ export function KanbanBoard({
           </button>
         </div>
         <DragOverlay>
-          {activeOverlay ? (
+          {activeDragId?.startsWith("container:") ? (
+            <div className="w-80 pointer-events-none">
+              <div className="rounded-xl border bg-white shadow-lg">
+                <div className="flex items-center justify-between px-3 py-2 border-b">
+                  <div className="font-medium">Mover lista</div>
+                </div>
+                <div className="p-3 text-sm text-neutral-500">...</div>
+              </div>
+            </div>
+          ) : activeOverlay ? (
             <div className="w-80 pointer-events-none">
               <KanbanCard
                 card={activeOverlay.card as any}

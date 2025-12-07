@@ -10,7 +10,13 @@ import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
-import { Plus, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  MoreHorizontal,
+  ChevronLeft,
+  ChevronRight,
+  GripHorizontal,
+} from "lucide-react";
 import * as React from "react";
 import { Popover } from "@/components/ui/Popover";
 
@@ -59,9 +65,7 @@ export function KanbanList({
   return (
     <motion.div
       ref={setSortableRef as React.Ref<HTMLDivElement>}
-      {...attributes}
-      {...listeners}
-      style={style}
+      style={{ ...style, touchAction: "none" }}
       className={`w-80 min-w-[20rem] bg-white/90 backdrop-blur border ${
         isOver ? "border-blue-400" : "border-neutral-200"
       } rounded-xl p-3 shadow-elevated hover:shadow-floating transition-all duration-250 ease-soft`}
@@ -71,6 +75,14 @@ export function KanbanList({
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-medium tracking-tight">{list.name}</h3>
         <div className="flex items-center gap-2">
+          <button
+            className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-neutral-100 cursor-grab active:cursor-grabbing"
+            title="Arrastar lista"
+            {...attributes}
+            {...listeners}
+          >
+            <GripHorizontal size={16} />
+          </button>
           <button
             onClick={onAddCard}
             className="text-xs inline-flex items-center gap-1 px-2 py-1 rounded-md bg-neutral-100 hover:bg-neutral-200 transition-colors"
