@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { CardModal } from "@/components/card/CardModal";
 import { useParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -27,7 +28,15 @@ export default function BoardPage() {
   const [archived, setArchived] = useState<any[]>([]);
   const [archivedQuery, setArchivedQuery] = useState("");
   const [archivedListId, setArchivedListId] = useState<string>("");
-  const [archivedLists, setArchivedLists] = useState<{ id: string; name: string }[]>([]);
+  const [archivedLists, setArchivedLists] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [archivedOpenCardId, setArchivedOpenCardId] = useState<string | null>(
+    null
+  );
+  const [archivedCovers, setArchivedCovers] = useState<
+    Record<string, string | null>
+  >({});
 
   useEffect(() => {
     let mounted = true;
@@ -183,9 +192,27 @@ export default function BoardPage() {
                         .eq("board_id", boardId)
                         .order("position", { ascending: true });
                       setArchivedLists(lists ?? []);
+                      // carregar thumbs de capa (se houver)
+                      const coverEntries = await Promise.all(
+                        (data ?? [])
+                          .filter((c: any) => c.cover_path)
+                          .map(async (c: any) => {
+                            const { data: s } = await supabase.storage
+                              .from("attachments")
+                              .createSignedUrl(c.cover_path, 60 * 10);
+                            return [c.id, s?.signedUrl ?? null] as const;
+                          })
+                      );
+                      setArchivedCovers(
+                        Object.fromEntries(coverEntries) as Record<
+                          string,
+                          string | null
+                        >
+                      );
                     } catch {
                       setArchived([]);
                       setArchivedLists([]);
+                      setArchivedCovers({});
                     }
                     setArchivedQuery("");
                     setArchivedListId("");
@@ -231,7 +258,14 @@ export default function BoardPage() {
       </div>
       <KanbanBoard boardId={boardId} workspaceId={workspaceId} />
       <Modal open={showArchived} onClose={() => setShowArchived(false)}>
-        <div className="p-4 w-[520px] max-w-[90vw]">
+        <div className="p-4 w-[520px] max-w-[90vw] relative">
+          <button
+            className="absolute top-2 right-2 h-8 w-8 inline-flex items-center justify-center rounded hover:bg-neutral-100"
+            aria-label="Fechar"
+            onClick={() => setShowArchived(false)}
+          >
+            ×
+          </button>
           <div className="text-lg font-semibold mb-3">Cartões arquivados</div>
           <div className="flex items-center gap-2 mb-3">
             <input
@@ -262,37 +296,107 @@ export default function BoardPage() {
               {archived
                 .filter((c) =>
                   archivedQuery
-                    ? (c.title ?? "").toLowerCase().includes(archivedQuery.toLowerCase())
+                    ? (c.title ?? "")
+                        .toLowerCase()
+                        .includes(archivedQuery.toLowerCase())
                     : true
                 )
-                .filter((c) => (archivedListId ? c.list_id === archivedListId : true))
+                .filter((c) =>
+                  archivedListId ? c.list_id === archivedListId : true
+                )
                 .map((c) => (
-                  <div key={c.id} className="border rounded px-3 py-2 flex items-center justify-between gap-3">
-                    <div>
+                  <div
+                    key={c.id}
+                    className="border rounded px-3 py-2 flex items-center justify-between gap-3 cursor-pointer hover:bg-neutral-50"
+                    onClick={() => setArchivedOpenCardId(c.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {archivedCovers[c.id] ? (
+                        <img
+                          src={archivedCovers[c.id] as string}
+                          alt="capa"
+                          className="w-14 h-9 object-cover rounded"
+                        />
+                      ) : null}
                       <div className="font-medium">{c.title}</div>
-                      <div className="text-xs text-neutral-500">
-                        {new Date(c.updated_at ?? c.created_at).toLocaleString()}
-                      </div>
                     </div>
-                    <button
-                      className="text-sm px-3 py-1 rounded border hover:bg-neutral-50"
-                      onClick={async () => {
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-neutral-500">
+                        {new Date(
+                          c.updated_at ?? c.created_at
+                        ).toLocaleString()}
+                      </div>
+                      <button
+                        className="text-sm px-3 py-1 rounded border hover:bg-neutral-50"
+                        onClick={async (e) => {
+                          e.stopPropagation();
                         await getSupabaseBrowserClient()
                           .from("cards")
                           .update({ archived_at: null })
                           .eq("id", c.id);
                         // remove localmente
-                        setArchived((prev) => prev.filter((x) => x.id !== c.id));
-                      }}
-                    >
-                      Restaurar
-                    </button>
+                        setArchived((prev) =>
+                          prev.filter((x) => x.id !== c.id)
+                        );
+                        }}
+                      >
+                        Restaurar
+                      </button>
+                      <button
+                        className="text-sm px-3 py-1 rounded border hover:bg-red-50 text-red-600"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm("Excluir permanentemente este cartão?"))
+                            return;
+                          try {
+                            const sb = getSupabaseBrowserClient();
+                            const { data: cls } = await sb
+                              .from("checklists")
+                              .select("id")
+                              .eq("card_id", c.id);
+                            const ids = (cls ?? []).map((x: any) => x.id);
+                            if (ids.length) {
+                              await sb
+                                .from("checklist_items")
+                                .delete()
+                                .in("checklist_id", ids);
+                              await sb.from("checklists").delete().in("id", ids);
+                            }
+                            await sb
+                              .from("card_comments")
+                              .delete()
+                              .eq("card_id", c.id);
+                            await sb
+                              .from("card_labels")
+                              .delete()
+                              .eq("card_id", c.id);
+                            await sb
+                              .from("attachments")
+                              .delete()
+                              .eq("card_id", c.id);
+                            await sb.from("cards").delete().eq("id", c.id);
+                          } finally {
+                            setArchived((prev) =>
+                              prev.filter((x) => x.id !== c.id)
+                            );
+                          }
+                        }}
+                      >
+                        Excluir
+                      </button>
+                    </div>
                   </div>
                 ))}
             </div>
           )}
         </div>
       </Modal>
+      <CardModal
+        open={!!archivedOpenCardId}
+        boardId={boardId}
+        cardId={archivedOpenCardId ?? ""}
+        onClose={() => setArchivedOpenCardId(null)}
+      />
     </div>
   );
 }
