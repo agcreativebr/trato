@@ -25,6 +25,9 @@ export default function BoardPage() {
   const menuBtnRef = useRef<HTMLButtonElement | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [archived, setArchived] = useState<any[]>([]);
+  const [archivedQuery, setArchivedQuery] = useState("");
+  const [archivedListId, setArchivedListId] = useState<string>("");
+  const [archivedLists, setArchivedLists] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -174,9 +177,18 @@ export default function BoardPage() {
                         // @ts-ignore
                         .not("archived_at", "is", null);
                       setArchived(data ?? []);
+                      const { data: lists } = await supabase
+                        .from("lists")
+                        .select("id,name")
+                        .eq("board_id", boardId)
+                        .order("position", { ascending: true });
+                      setArchivedLists(lists ?? []);
                     } catch {
                       setArchived([]);
+                      setArchivedLists([]);
                     }
+                    setArchivedQuery("");
+                    setArchivedListId("");
                     setShowArchived(true);
                   }}
                 >
@@ -221,20 +233,62 @@ export default function BoardPage() {
       <Modal open={showArchived} onClose={() => setShowArchived(false)}>
         <div className="p-4 w-[520px] max-w-[90vw]">
           <div className="text-lg font-semibold mb-3">Cartões arquivados</div>
+          <div className="flex items-center gap-2 mb-3">
+            <input
+              className="flex-1 border rounded px-3 py-2 text-sm"
+              placeholder="Buscar por título…"
+              value={archivedQuery}
+              onChange={(e) => setArchivedQuery(e.target.value)}
+            />
+            <select
+              className="border rounded px-2 py-2 text-sm"
+              value={archivedListId}
+              onChange={(e) => setArchivedListId(e.target.value)}
+            >
+              <option value="">Todas as listas</option>
+              {archivedLists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </div>
           {archived.length === 0 ? (
             <p className="text-sm text-neutral-600">
               Nenhum cartão arquivado encontrado.
             </p>
           ) : (
             <div className="space-y-2 max-h-[60vh] overflow-auto">
-              {archived.map((c) => (
-                <div key={c.id} className="border rounded px-3 py-2">
-                  <div className="font-medium">{c.title}</div>
-                  <div className="text-xs text-neutral-500">
-                    {new Date(c.updated_at ?? c.created_at).toLocaleString()}
+              {archived
+                .filter((c) =>
+                  archivedQuery
+                    ? (c.title ?? "").toLowerCase().includes(archivedQuery.toLowerCase())
+                    : true
+                )
+                .filter((c) => (archivedListId ? c.list_id === archivedListId : true))
+                .map((c) => (
+                  <div key={c.id} className="border rounded px-3 py-2 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium">{c.title}</div>
+                      <div className="text-xs text-neutral-500">
+                        {new Date(c.updated_at ?? c.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                    <button
+                      className="text-sm px-3 py-1 rounded border hover:bg-neutral-50"
+                      onClick={async () => {
+                        await getSupabaseBrowserClient()
+                          .from("cards")
+                          .update({ archived_at: null })
+                          .eq("id", c.id);
+                        // remove localmente
+                        setArchived((prev) => prev.filter((x) => x.id !== c.id));
+                      }}
+                    >
+                      Restaurar
+                    </button>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </div>

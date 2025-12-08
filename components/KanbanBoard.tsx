@@ -835,7 +835,10 @@ export function KanbanBoard({
                     const ids = cards.map((c) => c.id);
                     if (ids.length) {
                       const now = new Date().toISOString();
-                      await supabase.from("cards").update({ archived_at: now }).in("id", ids);
+                      await supabase
+                        .from("cards")
+                        .update({ archived_at: now })
+                        .in("id", ids);
                     }
                   }}
                 />
