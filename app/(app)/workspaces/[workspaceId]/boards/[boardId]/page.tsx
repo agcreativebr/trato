@@ -266,7 +266,8 @@ export default function BoardPage() {
           >
             ×
           </button>
-          <div className="text-lg font-semibold mb-3">Cartões arquivados</div>
+          <div className="mx-auto max-w-[720px]">
+          <div className="text-lg font-semibold mb-3 md:text-left text-center">Cartões arquivados</div>
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 md:gap-3 mb-3 items-center">
             <input
               className="border rounded px-3 py-2 text-sm"
@@ -404,10 +405,13 @@ export default function BoardPage() {
                       <div className="font-medium truncate">{c.title}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-700 border border-neutral-200">
-                          {archivedLists.find((l) => l.id === c.list_id)?.name ?? "—"}
+                          {archivedLists.find((l) => l.id === c.list_id)
+                            ?.name ?? "—"}
                         </span>
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-700 border border-neutral-200">
-                          {new Date(c.updated_at ?? c.created_at).toLocaleString()}
+                          {new Date(
+                            c.updated_at ?? c.created_at
+                          ).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -478,6 +482,7 @@ export default function BoardPage() {
                 ))}
             </div>
           )}
+          </div>
         </div>
       </Modal>
       <CardModal
