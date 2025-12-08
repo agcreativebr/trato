@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { useParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { Popover } from "@/components/ui/Popover";
+import { Modal } from "@/components/ui/Modal";
 import { ArrowLeft, Trash, Check, X } from "lucide-react";
 
 export default function BoardPage() {
@@ -19,6 +21,10 @@ export default function BoardPage() {
   const [localName, setLocalName] = useState("");
   const [saving, setSaving] = useState(false);
   const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archived, setArchived] = useState<any[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -135,26 +141,104 @@ export default function BoardPage() {
             >
               Voltar
             </Button>
-            <Button
-              variant="secondary"
-              leftIcon={<Trash size={16} />}
-              onClick={async () => {
-                if (!confirm("Excluir este quadro? Esta ação é permanente."))
-                  return;
-                await fetch("/api/boards", {
-                  method: "DELETE",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: boardId }),
-                });
-                router.push("/dashboard");
-              }}
+            <button
+              ref={menuBtnRef}
+              className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-neutral-100"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Menu do quadro"
+              title="Menu do quadro"
             >
-              Excluir quadro
-            </Button>
+              ⋯
+            </button>
+            <Popover
+              open={menuOpen}
+              onClose={() => setMenuOpen(false)}
+              anchorRect={menuBtnRef.current?.getBoundingClientRect()}
+              width={240}
+            >
+              <div className="p-2 space-y-1">
+                <div className="text-sm font-semibold px-2 py-1">
+                  Menu do quadro
+                </div>
+                <button
+                  className="w-full text-left px-2 py-1 hover:bg-neutral-50"
+                  onClick={async () => {
+                    setMenuOpen(false);
+                    try {
+                      // Campo archived_at pode não existir ainda; manter UI sem quebrar
+                      // @ts-ignore
+                      const { data } = await supabase
+                        .from("cards")
+                        .select("*")
+                        .eq("board_id", boardId)
+                        // @ts-ignore
+                        .not("archived_at", "is", null);
+                      setArchived(data ?? []);
+                    } catch {
+                      setArchived([]);
+                    }
+                    setShowArchived(true);
+                  }}
+                >
+                  Cartões arquivados…
+                </button>
+                <button
+                  className="w-full text-left px-2 py-1 hover:bg-neutral-50"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setEditingName(true);
+                    setTimeout(() => {
+                      // foco fica no input já que autoFocus está ativado
+                    }, 0);
+                  }}
+                >
+                  Renomear quadro…
+                </button>
+                <button
+                  className="w-full text-left px-2 py-1 hover:bg-neutral-50 text-red-600"
+                  onClick={async () => {
+                    setMenuOpen(false);
+                    if (
+                      !confirm("Excluir este quadro? Esta ação é permanente.")
+                    )
+                      return;
+                    await fetch("/api/boards", {
+                      method: "DELETE",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ id: boardId }),
+                    });
+                    router.push("/dashboard");
+                  }}
+                >
+                  Excluir quadro
+                </button>
+              </div>
+            </Popover>
           </div>
         </div>
       </div>
       <KanbanBoard boardId={boardId} workspaceId={workspaceId} />
+      <Modal open={showArchived} onClose={() => setShowArchived(false)}>
+        <div className="p-4 w-[520px] max-w-[90vw]">
+          <div className="text-lg font-semibold mb-3">Cartões arquivados</div>
+          {archived.length === 0 ? (
+            <p className="text-sm text-neutral-600">
+              Nenhum cartão arquivado encontrado.
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-[60vh] overflow-auto">
+              {archived.map((c) => (
+                <div key={c.id} className="border rounded px-3 py-2">
+                  <div className="font-medium">{c.title}</div>
+                  <div className="text-xs text-neutral-500">
+                    {new Date(c.updated_at ?? c.created_at).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

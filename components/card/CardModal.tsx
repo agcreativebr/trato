@@ -87,6 +87,11 @@ export function CardModal({
   const labelsBtnRef = useRef<HTMLButtonElement | null>(null);
   const datesBtnRef = useRef<HTMLButtonElement | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const datesPanelRef = useRef<HTMLDivElement | null>(null);
+  const labelsPanelRef = useRef<HTMLDivElement | null>(null);
+  const movePanelRef = useRef<HTMLDivElement | null>(null);
+  const attachmentsPanelRef = useRef<HTMLDivElement | null>(null);
+  const [following, setFollowing] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -312,6 +317,41 @@ export function CardModal({
     onClose();
   }
 
+  async function copyCard() {
+    const { data: card } = await supabase
+      .from("cards")
+      .select("*")
+      .eq("id", cardId)
+      .single();
+    if (!card) return;
+    const { data: last } = await supabase
+      .from("cards")
+      .select("position")
+      .eq("list_id", card.list_id)
+      .order("position", { ascending: false })
+      .limit(1);
+    const pos = last && last.length ? (last[0] as any).position + 100 : 100;
+    await supabase.from("cards").insert({
+      board_id: card.board_id,
+      list_id: card.list_id,
+      title: `${card.title} (cópia)`,
+      description: card.description,
+      position: pos,
+      start_date: card.start_date,
+      due_date: card.due_date,
+      cover_path: card.cover_path,
+      cover_size: card.cover_size,
+    });
+    onClose();
+  }
+
+  async function archiveCard() {
+    if (!confirm("Arquivar este cartão?")) return;
+    const now = new Date().toISOString();
+    await supabase.from("cards").update({ archived_at: now }).eq("id", cardId);
+    onClose();
+  }
+
   async function addComment() {
     const content = comment.trim();
     if (!content) return;
@@ -450,7 +490,7 @@ export function CardModal({
                   })}
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2" ref={attachmentsPanelRef}>
                   <label className="text-sm font-medium">Anexos</label>
                   <div className="space-y-2">
                     <input
@@ -563,7 +603,116 @@ export function CardModal({
               </div>
 
               <div className="space-y-3">
-                <div id="dates-panel" className="border rounded-md p-3">
+                {/* Ações (estilo Trello) */}
+                <div className="border rounded-md p-3">
+                  <div className="text-sm font-medium mb-2">Ações</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<Users size={14} />}
+                      onClick={() =>
+                        alert(
+                          "Membros: em breve (placeholder sem quebrar fluxo)."
+                        )
+                      }
+                    >
+                      Membros
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<Tag size={14} />}
+                      onClick={() => {
+                        labelsPanelRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }}
+                    >
+                      Etiquetas
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<CheckSquare size={14} />}
+                      onClick={addChecklist}
+                    >
+                      Checklist
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<Calendar size={14} />}
+                      onClick={() => {
+                        datesPanelRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }}
+                    >
+                      Datas
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<LinkIcon size={14} />}
+                      onClick={() => {
+                        attachmentsPanelRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }}
+                    >
+                      Anexo
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<MoveRight size={14} />}
+                      onClick={() => {
+                        movePanelRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }}
+                    >
+                      Mover
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={copyCard}>
+                      Copiar
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        const url = location.href;
+                        try {
+                          await navigator.clipboard.writeText(url);
+                          alert("Link copiado!");
+                        } catch {}
+                      }}
+                    >
+                      Compartilhar
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setFollowing((v) => !v)}
+                    >
+                      {following ? "Seguindo" : "Seguir"}
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={archiveCard}>
+                      Arquivar
+                    </Button>
+                  </div>
+                </div>
+
+                <div
+                  id="dates-panel"
+                  ref={datesPanelRef}
+                  className="border rounded-md p-3"
+                >
                   <div className="text-sm font-medium mb-2">Datas</div>
                   <DatesInline
                     startValue={startDate}
@@ -591,7 +740,7 @@ export function CardModal({
                   />
                 </div>
 
-                <div className="border rounded-md p-3">
+                <div ref={movePanelRef} className="border rounded-md p-3">
                   <div className="text-sm font-medium mb-2">Mover cartão</div>
                   <div className="flex items-center gap-2">
                     <select
@@ -614,7 +763,11 @@ export function CardModal({
                     </Button>
                   </div>
                 </div>
-                <div id="labels-panel" className="border rounded-md p-3">
+                <div
+                  id="labels-panel"
+                  ref={labelsPanelRef}
+                  className="border rounded-md p-3"
+                >
                   <div className="text-sm font-medium mb-2">Etiquetas</div>
                   <LabelsEditor
                     labels={labels}

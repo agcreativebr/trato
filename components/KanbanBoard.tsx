@@ -129,6 +129,7 @@ export function KanbanBoard({
         .from("cards")
         .select("*")
         .eq("board_id", boardId)
+        .is("archived_at", null)
         .order("position", { ascending: true });
       if (!mounted) return;
       setLists(ls ?? []);
@@ -297,6 +298,7 @@ export function KanbanBoard({
           setCardsByList((prev) => {
             const updated = { ...prev };
             if (payload.eventType === "INSERT") {
+              if ((payload.new as any)?.archived_at) return updated;
               const listId = payload.new.list_id;
               updated[listId] = [...(updated[listId] ?? []), payload.new].sort(
                 (a, b) => a.position - b.position
@@ -307,6 +309,10 @@ export function KanbanBoard({
                 updated[key] = (updated[key] ?? []).filter(
                   (c) => c.id !== payload.new.id
                 );
+              }
+              if ((payload.new as any)?.archived_at) {
+                // arquivado: não reintroduzir
+                return updated;
               }
               const listId = payload.new.list_id;
               updated[listId] = [...(updated[listId] ?? []), payload.new].sort(
@@ -816,6 +822,21 @@ export function KanbanBoard({
                     const { [l.id]: _removed, ...rest } = cardsByList as any;
                     setCardsByList(rest);
                     await supabase.from("lists").delete().eq("id", l.id);
+                  }}
+                  onArchiveAllCards={async () => {
+                    const cards = (cardsByList[l.id] ?? []).slice();
+                    // UI otimista: esvazia a lista local
+                    setCardsByList((prev) => {
+                      const copy = { ...prev };
+                      copy[l.id] = [];
+                      return copy;
+                    });
+                    // persistir: soft delete (arquivar)
+                    const ids = cards.map((c) => c.id);
+                    if (ids.length) {
+                      const now = new Date().toISOString();
+                      await supabase.from("cards").update({ archived_at: now }).in("id", ids);
+                    }
                   }}
                 />
               </>

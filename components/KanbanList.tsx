@@ -34,6 +34,7 @@ export function KanbanList({
   onMoveAllCards,
   onSortList,
   onArchiveList,
+  onArchiveAllCards,
 }: {
   list: { id: string; name: string };
   boardId: string;
@@ -47,6 +48,7 @@ export function KanbanList({
   onMoveAllCards: (targetListId: string) => void;
   onSortList: (mode: "created" | "created_desc" | "due" | "alpha") => void;
   onArchiveList: () => void;
+  onArchiveAllCards?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `list:${list.id}`,
@@ -336,13 +338,20 @@ export function KanbanList({
                 >
                   Excluir lista
                 </button>
+                <button
+                  className="w-full text-left px-2 py-1 hover:bg-neutral-50"
+                  onClick={() => {
+                    if (confirm("Arquivar todos os cartões desta lista?")) {
+                      onArchiveAllCards?.();
+                    }
+                  }}
+                >
+                  Arquivar todos os cartões desta lista…
+                </button>
               </div>
               <div className="py-1 opacity-60 pointer-events-none">
                 <div className="px-2 py-1 text-xs">Automação (em breve)</div>
                 <button className="w-full text-left px-2 py-1">Seguir</button>
-                <button className="w-full text-left px-2 py-1">
-                  Arquivar todos os cartões nesta lista
-                </button>
               </div>
             </div>
           </>
