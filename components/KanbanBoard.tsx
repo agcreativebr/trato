@@ -57,6 +57,7 @@ type BoardSettings = {
 
 export function KanbanBoard({
   boardId,
+  workspaceId,
 }: {
   boardId: string;
   workspaceId: string;
@@ -413,9 +414,9 @@ export function KanbanBoard({
       .insert({ name, board_id: boardId, position: maxPos + 100 });
   }
 
-  async function addCard(listId: string) {
-    const title = prompt("Título do cartão:")?.trim();
-    if (!title) return;
+  async function addCard(listId: string, title: string) {
+    const t = title.trim();
+    if (!t) return;
     const cards = cardsByList[listId] ?? [];
     const maxPos = cards.length ? Math.max(...cards.map((c) => c.position)) : 0;
     const now = new Date();
@@ -426,13 +427,17 @@ export function KanbanBoard({
             now.getTime() + settings.due_offset_minutes * 60000
           ).toISOString()
         : null;
-    await supabase.from("cards").insert({
-      title,
-      board_id: boardId,
-      list_id: listId,
-      position: maxPos + 100,
-      start_date,
-      due_date,
+    await fetch("/api/cards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: t,
+        board_id: boardId,
+        list_id: listId,
+        position: maxPos + 100,
+        description: null,
+        due_date,
+      }),
     });
   }
 
@@ -611,7 +616,7 @@ export function KanbanBoard({
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-6 px-6">
+    <div className="flex gap-4 overflow-x-auto pb-6 px-6 mt-4">
       <DndContext
         sensors={sensors}
         collisionDetection={rectIntersection}
@@ -632,6 +637,8 @@ export function KanbanBoard({
                 <KanbanList
                   key={l.id}
                   list={l}
+                  boardId={boardId}
+                  workspaceId={workspaceId}
                   cards={
                     (cardsByList[l.id] ?? []).map((c) => ({
                       ...c,
@@ -642,7 +649,7 @@ export function KanbanBoard({
                       commentsCount: commentsCountByCard[c.id] ?? 0,
                     })) as any
                   }
-                  onAddCard={() => addCard(l.id)}
+                  onAddCard={(title) => addCard(l.id, title)}
                   allLists={lists}
                   onMoveList={async (dir) => {
                     const idx = lists.findIndex((x) => x.id === l.id);
@@ -670,31 +677,58 @@ export function KanbanBoard({
                     ]);
                   }}
                   onCopyList={async () => {
-                    const name = `${l.name} (Cópia)`;
-                    const maxPos = lists.length
-                      ? Math.max(...lists.map((x) => x.position))
-                      : 0;
-                    const { data: newList } = await supabase
-                      .from("lists")
-                      .insert({
-                        name,
-                        board_id: l.board_id,
-                        position: maxPos + 100,
-                      })
-                      .select("*")
-                      .single();
-                    const cards = cardsByList[l.id] ?? [];
-                    for (let i = 0; i < cards.length; i++) {
-                      const c = cards[i];
-                      await supabase.from("cards").insert({
-                        title: c.title,
-                        description: c.description,
-                        board_id: c.board_id,
-                        list_id: (newList as any).id,
-                        position: (i + 1) * 100,
-                        due_date: c.due_date,
-                        start_date: c.start_date,
+                    await fetch("/api/lists/copy", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        list_id: l.id,
+                        target_board_id: boardId,
+                        name: `${l.name} (Cópia)`,
+                      }),
+                    });
+                  }}
+                  onMoveListTo={async (
+                    targetBoardId: string,
+                    positionIndex: number
+                  ) => {
+                    // UI otimista
+                    const prevLists = lists;
+                    const prevCardsByList = cardsByList;
+                    try {
+                      if (targetBoardId === boardId) {
+                        // mover dentro do mesmo quadro: reordenar localmente pelo índice escolhido
+                        const fromIdx = lists.findIndex((x) => x.id === l.id);
+                        const toIdx = Math.min(
+                          Math.max(positionIndex - 1, 0),
+                          lists.length - 1
+                        );
+                        if (fromIdx !== -1 && toIdx !== fromIdx) {
+                          const next = [...lists];
+                          const [moved] = next.splice(fromIdx, 1);
+                          next.splice(toIdx, 0, moved);
+                          setLists(next);
+                        }
+                      } else {
+                        // mover para outro quadro: remove localmente
+                        setLists((prev) => prev.filter((x) => x.id !== l.id));
+                        const { [l.id]: _removed, ...rest } =
+                          cardsByList as any;
+                        setCardsByList(rest);
+                      }
+                      // persistir no servidor
+                      await fetch("/api/lists/move", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          list_id: l.id,
+                          target_board_id: targetBoardId,
+                          positionIndex,
+                        }),
                       });
+                    } catch {
+                      // rollback
+                      setLists(prevLists);
+                      setCardsByList(prevCardsByList);
                     }
                   }}
                   onMoveAllCards={async (targetListId) => {
@@ -730,11 +764,13 @@ export function KanbanBoard({
                   }}
                   onSortList={async (mode) => {
                     const cards = (cardsByList[l.id] ?? []).slice();
-                    if (mode === "created")
-                      cards.sort(
-                        (a: any, b: any) =>
-                          new Date(a.created_at).getTime() -
-                          new Date(b.created_at).getTime()
+                    if (mode === "created" || mode === "created_desc")
+                      cards.sort((a: any, b: any) =>
+                        mode === "created_desc"
+                          ? new Date(b.created_at).getTime() -
+                            new Date(a.created_at).getTime()
+                          : new Date(a.created_at).getTime() -
+                            new Date(b.created_at).getTime()
                       );
                     if (mode === "due")
                       cards.sort(
@@ -745,6 +781,12 @@ export function KanbanBoard({
                           (b.due_date
                             ? new Date(b.due_date).getTime()
                             : Infinity)
+                      );
+                    if (mode === "alpha")
+                      cards.sort((a: any, b: any) =>
+                        (a.title || "").localeCompare(b.title || "", "pt-BR", {
+                          sensitivity: "base",
+                        })
                       );
                     // UI otimista
                     setCardsByList((prev) => ({
@@ -769,6 +811,10 @@ export function KanbanBoard({
                     for (const c of cards) {
                       await supabase.from("cards").delete().eq("id", c.id);
                     }
+                    // UI otimista: remove a lista localmente
+                    setLists((prev) => prev.filter((x) => x.id !== l.id));
+                    const { [l.id]: _removed, ...rest } = cardsByList as any;
+                    setCardsByList(rest);
                     await supabase.from("lists").delete().eq("id", l.id);
                   }}
                 />
