@@ -287,41 +287,83 @@ export default function BoardPage() {
               ))}
             </select>
             <div className="flex gap-2 justify-end">
-              <Button variant="secondary" size="sm" onClick={async () => {
-                // bulk restore
-                const ids = archived
-                  .filter((c) => (archivedQuery ? (c.title ?? '').toLowerCase().includes(archivedQuery.toLowerCase()) : true))
-                  .filter((c) => (archivedListId ? c.list_id === archivedListId : true))
-                  .map((c) => c.id);
-                if (!ids.length) return;
-                await getSupabaseBrowserClient().from('cards').update({ archived_at: null }).in('id', ids);
-                setArchived((prev) => prev.filter((c) => !ids.includes(c.id)));
-              }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  // bulk restore
+                  const ids = archived
+                    .filter((c) =>
+                      archivedQuery
+                        ? (c.title ?? "")
+                            .toLowerCase()
+                            .includes(archivedQuery.toLowerCase())
+                        : true
+                    )
+                    .filter((c) =>
+                      archivedListId ? c.list_id === archivedListId : true
+                    )
+                    .map((c) => c.id);
+                  if (!ids.length) return;
+                  await getSupabaseBrowserClient()
+                    .from("cards")
+                    .update({ archived_at: null })
+                    .in("id", ids);
+                  setArchived((prev) =>
+                    prev.filter((c) => !ids.includes(c.id))
+                  );
+                }}
+              >
                 Restaurar todos
               </Button>
-              <Button variant="ghost" size="sm" onClick={async () => {
-                const ids = archived
-                  .filter((c) => (archivedQuery ? (c.title ?? '').toLowerCase().includes(archivedQuery.toLowerCase()) : true))
-                  .filter((c) => (archivedListId ? c.list_id === archivedListId : true))
-                  .map((c) => c.id);
-                if (!ids.length) return;
-                if (!confirm(`Excluir permanentemente ${ids.length} cartão(ões)? Essa ação não pode ser desfeita.`)) return;
-                const sb = getSupabaseBrowserClient();
-                try {
-                  const { data: cls } = await sb.from('checklists').select('id').in('card_id', ids);
-                  const checkIds = (cls ?? []).map((x: any) => x.id);
-                  if (checkIds.length) {
-                    await sb.from('checklist_items').delete().in('checklist_id', checkIds);
-                    await sb.from('checklists').delete().in('id', checkIds);
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  const ids = archived
+                    .filter((c) =>
+                      archivedQuery
+                        ? (c.title ?? "")
+                            .toLowerCase()
+                            .includes(archivedQuery.toLowerCase())
+                        : true
+                    )
+                    .filter((c) =>
+                      archivedListId ? c.list_id === archivedListId : true
+                    )
+                    .map((c) => c.id);
+                  if (!ids.length) return;
+                  if (
+                    !confirm(
+                      `Excluir permanentemente ${ids.length} cartão(ões)? Essa ação não pode ser desfeita.`
+                    )
+                  )
+                    return;
+                  const sb = getSupabaseBrowserClient();
+                  try {
+                    const { data: cls } = await sb
+                      .from("checklists")
+                      .select("id")
+                      .in("card_id", ids);
+                    const checkIds = (cls ?? []).map((x: any) => x.id);
+                    if (checkIds.length) {
+                      await sb
+                        .from("checklist_items")
+                        .delete()
+                        .in("checklist_id", checkIds);
+                      await sb.from("checklists").delete().in("id", checkIds);
+                    }
+                    await sb.from("card_comments").delete().in("card_id", ids);
+                    await sb.from("card_labels").delete().in("card_id", ids);
+                    await sb.from("attachments").delete().in("card_id", ids);
+                    await sb.from("cards").delete().in("id", ids);
+                  } finally {
+                    setArchived((prev) =>
+                      prev.filter((c) => !ids.includes(c.id))
+                    );
                   }
-                  await sb.from('card_comments').delete().in('card_id', ids);
-                  await sb.from('card_labels').delete().in('card_id', ids);
-                  await sb.from('attachments').delete().in('card_id', ids);
-                  await sb.from('cards').delete().in('id', ids);
-                } finally {
-                  setArchived((prev) => prev.filter((c) => !ids.includes(c.id)));
-                }
-              }}>
+                }}
+              >
                 Excluir todos
               </Button>
             </div>
@@ -346,7 +388,7 @@ export default function BoardPage() {
                 .map((c) => (
                   <div
                     key={c.id}
-                    className="border rounded px-3 py-2 grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_1fr_auto_auto] gap-3 items-center cursor-pointer hover:bg-neutral-50"
+                    className="w-full border border-neutral-200 rounded-lg bg-white px-3 py-2 grid grid-cols-[auto_1fr_auto] gap-3 items-center cursor-pointer hover:bg-neutral-50 shadow-sm"
                     onClick={() => setArchivedOpenCardId(c.id)}
                   >
                     {archivedCovers[c.id] ? (
@@ -360,12 +402,14 @@ export default function BoardPage() {
                     )}
                     <div className="min-w-0">
                       <div className="font-medium truncate">{c.title}</div>
-                      <div className="text-xs text-neutral-500 truncate">
-                        {archivedLists.find((l) => l.id === c.list_id)?.name ?? "—"}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-700 border border-neutral-200">
+                          {archivedLists.find((l) => l.id === c.list_id)?.name ?? "—"}
+                        </span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-700 border border-neutral-200">
+                          {new Date(c.updated_at ?? c.created_at).toLocaleString()}
+                        </span>
                       </div>
-                    </div>
-                    <div className="text-xs text-neutral-500">
-                      {new Date(c.updated_at ?? c.created_at).toLocaleString()}
                     </div>
                     <div className="flex gap-2 justify-end">
                       <button
