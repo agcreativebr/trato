@@ -258,7 +258,7 @@ export default function BoardPage() {
       </div>
       <KanbanBoard boardId={boardId} workspaceId={workspaceId} />
       <Modal open={showArchived} onClose={() => setShowArchived(false)}>
-        <div className="p-4 w-[860px] max-w-[95vw] relative">
+        <div className="p-4 w-[980px] max-w-[98vw] relative">
           <button
             className="absolute top-2 right-2 h-8 w-8 inline-flex items-center justify-center rounded hover:bg-neutral-100"
             aria-label="Fechar"
@@ -270,15 +270,15 @@ export default function BoardPage() {
             <div className="text-lg font-semibold mb-3 md:text-left text-center">
               Cartões arquivados
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 md:gap-3 mb-3 items-center">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-3">
               <input
-                className="border rounded px-3 py-2 text-sm"
+                className="flex-1 min-w-[260px] border rounded px-3 py-2 text-sm"
                 placeholder="Buscar por título…"
                 value={archivedQuery}
                 onChange={(e) => setArchivedQuery(e.target.value)}
               />
               <select
-                className="border rounded px-2 py-2 text-sm"
+                className="w-52 border rounded px-2 py-2 text-sm"
                 value={archivedListId}
                 onChange={(e) => setArchivedListId(e.target.value)}
               >
@@ -289,7 +289,7 @@ export default function BoardPage() {
                   </option>
                 ))}
               </select>
-              <div className="flex gap-2 justify-end">
+              <div className="ml-auto flex gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
