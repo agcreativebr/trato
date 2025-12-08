@@ -266,222 +266,229 @@ export default function BoardPage() {
           >
             ×
           </button>
-          <div className="mx-auto max-w-[720px]">
-          <div className="text-lg font-semibold mb-3 md:text-left text-center">Cartões arquivados</div>
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 md:gap-3 mb-3 items-center">
-            <input
-              className="border rounded px-3 py-2 text-sm"
-              placeholder="Buscar por título…"
-              value={archivedQuery}
-              onChange={(e) => setArchivedQuery(e.target.value)}
-            />
-            <select
-              className="border rounded px-2 py-2 text-sm"
-              value={archivedListId}
-              onChange={(e) => setArchivedListId(e.target.value)}
-            >
-              <option value="">Todas as listas</option>
-              {archivedLists.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={async () => {
-                  // bulk restore
-                  const ids = archived
-                    .filter((c) =>
-                      archivedQuery
-                        ? (c.title ?? "")
-                            .toLowerCase()
-                            .includes(archivedQuery.toLowerCase())
-                        : true
-                    )
-                    .filter((c) =>
-                      archivedListId ? c.list_id === archivedListId : true
-                    )
-                    .map((c) => c.id);
-                  if (!ids.length) return;
-                  await getSupabaseBrowserClient()
-                    .from("cards")
-                    .update({ archived_at: null })
-                    .in("id", ids);
-                  setArchived((prev) =>
-                    prev.filter((c) => !ids.includes(c.id))
-                  );
-                }}
+          <div className="mx-auto max-w-none px-2 md:px-0">
+            <div className="text-lg font-semibold mb-3 md:text-left text-center">
+              Cartões arquivados
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 md:gap-3 mb-3 items-center">
+              <input
+                className="border rounded px-3 py-2 text-sm"
+                placeholder="Buscar por título…"
+                value={archivedQuery}
+                onChange={(e) => setArchivedQuery(e.target.value)}
+              />
+              <select
+                className="border rounded px-2 py-2 text-sm"
+                value={archivedListId}
+                onChange={(e) => setArchivedListId(e.target.value)}
               >
-                Restaurar todos
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={async () => {
-                  const ids = archived
-                    .filter((c) =>
-                      archivedQuery
-                        ? (c.title ?? "")
-                            .toLowerCase()
-                            .includes(archivedQuery.toLowerCase())
-                        : true
-                    )
-                    .filter((c) =>
-                      archivedListId ? c.list_id === archivedListId : true
-                    )
-                    .map((c) => c.id);
-                  if (!ids.length) return;
-                  if (
-                    !confirm(
-                      `Excluir permanentemente ${ids.length} cartão(ões)? Essa ação não pode ser desfeita.`
-                    )
-                  )
-                    return;
-                  const sb = getSupabaseBrowserClient();
-                  try {
-                    const { data: cls } = await sb
-                      .from("checklists")
-                      .select("id")
-                      .in("card_id", ids);
-                    const checkIds = (cls ?? []).map((x: any) => x.id);
-                    if (checkIds.length) {
-                      await sb
-                        .from("checklist_items")
-                        .delete()
-                        .in("checklist_id", checkIds);
-                      await sb.from("checklists").delete().in("id", checkIds);
-                    }
-                    await sb.from("card_comments").delete().in("card_id", ids);
-                    await sb.from("card_labels").delete().in("card_id", ids);
-                    await sb.from("attachments").delete().in("card_id", ids);
-                    await sb.from("cards").delete().in("id", ids);
-                  } finally {
+                <option value="">Todas as listas</option>
+                {archivedLists.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    // bulk restore
+                    const ids = archived
+                      .filter((c) =>
+                        archivedQuery
+                          ? (c.title ?? "")
+                              .toLowerCase()
+                              .includes(archivedQuery.toLowerCase())
+                          : true
+                      )
+                      .filter((c) =>
+                        archivedListId ? c.list_id === archivedListId : true
+                      )
+                      .map((c) => c.id);
+                    if (!ids.length) return;
+                    await getSupabaseBrowserClient()
+                      .from("cards")
+                      .update({ archived_at: null })
+                      .in("id", ids);
                     setArchived((prev) =>
                       prev.filter((c) => !ids.includes(c.id))
                     );
-                  }
-                }}
-              >
-                Excluir todos
-              </Button>
+                  }}
+                >
+                  Restaurar todos
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    const ids = archived
+                      .filter((c) =>
+                        archivedQuery
+                          ? (c.title ?? "")
+                              .toLowerCase()
+                              .includes(archivedQuery.toLowerCase())
+                          : true
+                      )
+                      .filter((c) =>
+                        archivedListId ? c.list_id === archivedListId : true
+                      )
+                      .map((c) => c.id);
+                    if (!ids.length) return;
+                    if (
+                      !confirm(
+                        `Excluir permanentemente ${ids.length} cartão(ões)? Essa ação não pode ser desfeita.`
+                      )
+                    )
+                      return;
+                    const sb = getSupabaseBrowserClient();
+                    try {
+                      const { data: cls } = await sb
+                        .from("checklists")
+                        .select("id")
+                        .in("card_id", ids);
+                      const checkIds = (cls ?? []).map((x: any) => x.id);
+                      if (checkIds.length) {
+                        await sb
+                          .from("checklist_items")
+                          .delete()
+                          .in("checklist_id", checkIds);
+                        await sb.from("checklists").delete().in("id", checkIds);
+                      }
+                      await sb
+                        .from("card_comments")
+                        .delete()
+                        .in("card_id", ids);
+                      await sb.from("card_labels").delete().in("card_id", ids);
+                      await sb.from("attachments").delete().in("card_id", ids);
+                      await sb.from("cards").delete().in("id", ids);
+                    } finally {
+                      setArchived((prev) =>
+                        prev.filter((c) => !ids.includes(c.id))
+                      );
+                    }
+                  }}
+                >
+                  Excluir todos
+                </Button>
+              </div>
             </div>
-          </div>
-          {archived.length === 0 ? (
-            <p className="text-sm text-neutral-600">
-              Nenhum cartão arquivado encontrado.
-            </p>
-          ) : (
-            <div className="space-y-2 max-h-[60vh] overflow-auto">
-              {archived
-                .filter((c) =>
-                  archivedQuery
-                    ? (c.title ?? "")
-                        .toLowerCase()
-                        .includes(archivedQuery.toLowerCase())
-                    : true
-                )
-                .filter((c) =>
-                  archivedListId ? c.list_id === archivedListId : true
-                )
-                .map((c) => (
-                  <div
-                    key={c.id}
-                    className="w-full border border-neutral-200 rounded-lg bg-white px-3 py-2 grid grid-cols-[auto_1fr_auto] gap-3 items-center cursor-pointer hover:bg-neutral-50 shadow-sm"
-                    onClick={() => setArchivedOpenCardId(c.id)}
-                  >
-                    {archivedCovers[c.id] ? (
-                      <img
-                        src={archivedCovers[c.id] as string}
-                        alt="capa"
-                        className="w-16 h-10 object-cover rounded"
-                      />
-                    ) : (
-                      <div className="w-16 h-10 rounded bg-neutral-100" />
-                    )}
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{c.title}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-700 border border-neutral-200">
-                          {archivedLists.find((l) => l.id === c.list_id)
-                            ?.name ?? "—"}
-                        </span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-700 border border-neutral-200">
-                          {new Date(
-                            c.updated_at ?? c.created_at
-                          ).toLocaleString()}
-                        </span>
+            {archived.length === 0 ? (
+              <p className="text-sm text-neutral-600">
+                Nenhum cartão arquivado encontrado.
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-[60vh] overflow-auto">
+                {archived
+                  .filter((c) =>
+                    archivedQuery
+                      ? (c.title ?? "")
+                          .toLowerCase()
+                          .includes(archivedQuery.toLowerCase())
+                      : true
+                  )
+                  .filter((c) =>
+                    archivedListId ? c.list_id === archivedListId : true
+                  )
+                  .map((c) => (
+                    <div
+                      key={c.id}
+                      className="w-full border border-neutral-200 rounded-lg bg-white px-3 py-2 grid grid-cols-[auto_1fr_auto] gap-3 items-center cursor-pointer hover:bg-neutral-50 shadow-sm"
+                      onClick={() => setArchivedOpenCardId(c.id)}
+                    >
+                      {archivedCovers[c.id] ? (
+                        <img
+                          src={archivedCovers[c.id] as string}
+                          alt="capa"
+                          className="w-16 h-10 object-cover rounded"
+                        />
+                      ) : (
+                        <div className="w-16 h-10 rounded bg-neutral-100" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{c.title}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-700 border border-neutral-200">
+                            {archivedLists.find((l) => l.id === c.list_id)
+                              ?.name ?? "—"}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-700 border border-neutral-200">
+                            {new Date(
+                              c.updated_at ?? c.created_at
+                            ).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        className="text-sm px-3 py-1 rounded border hover:bg-neutral-50"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await getSupabaseBrowserClient()
-                            .from("cards")
-                            .update({ archived_at: null })
-                            .eq("id", c.id);
-                          // remove localmente
-                          setArchived((prev) =>
-                            prev.filter((x) => x.id !== c.id)
-                          );
-                        }}
-                      >
-                        Restaurar
-                      </button>
-                      <button
-                        className="text-sm px-3 py-1 rounded border hover:bg-red-50 text-red-600"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (!confirm("Excluir permanentemente este cartão?"))
-                            return;
-                          try {
-                            const sb = getSupabaseBrowserClient();
-                            const { data: cls } = await sb
-                              .from("checklists")
-                              .select("id")
-                              .eq("card_id", c.id);
-                            const ids = (cls ?? []).map((x: any) => x.id);
-                            if (ids.length) {
-                              await sb
-                                .from("checklist_items")
-                                .delete()
-                                .in("checklist_id", ids);
-                              await sb
-                                .from("checklists")
-                                .delete()
-                                .in("id", ids);
-                            }
-                            await sb
-                              .from("card_comments")
-                              .delete()
-                              .eq("card_id", c.id);
-                            await sb
-                              .from("card_labels")
-                              .delete()
-                              .eq("card_id", c.id);
-                            await sb
-                              .from("attachments")
-                              .delete()
-                              .eq("card_id", c.id);
-                            await sb.from("cards").delete().eq("id", c.id);
-                          } finally {
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          className="text-sm px-3 py-1 rounded border hover:bg-neutral-50"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await getSupabaseBrowserClient()
+                              .from("cards")
+                              .update({ archived_at: null })
+                              .eq("id", c.id);
+                            // remove localmente
                             setArchived((prev) =>
                               prev.filter((x) => x.id !== c.id)
                             );
-                          }
-                        }}
-                      >
-                        Excluir
-                      </button>
+                          }}
+                        >
+                          Restaurar
+                        </button>
+                        <button
+                          className="text-sm px-3 py-1 rounded border hover:bg-red-50 text-red-600"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (
+                              !confirm("Excluir permanentemente este cartão?")
+                            )
+                              return;
+                            try {
+                              const sb = getSupabaseBrowserClient();
+                              const { data: cls } = await sb
+                                .from("checklists")
+                                .select("id")
+                                .eq("card_id", c.id);
+                              const ids = (cls ?? []).map((x: any) => x.id);
+                              if (ids.length) {
+                                await sb
+                                  .from("checklist_items")
+                                  .delete()
+                                  .in("checklist_id", ids);
+                                await sb
+                                  .from("checklists")
+                                  .delete()
+                                  .in("id", ids);
+                              }
+                              await sb
+                                .from("card_comments")
+                                .delete()
+                                .eq("card_id", c.id);
+                              await sb
+                                .from("card_labels")
+                                .delete()
+                                .eq("card_id", c.id);
+                              await sb
+                                .from("attachments")
+                                .delete()
+                                .eq("card_id", c.id);
+                              await sb.from("cards").delete().eq("id", c.id);
+                            } finally {
+                              setArchived((prev) =>
+                                prev.filter((x) => x.id !== c.id)
+                              );
+                            }
+                          }}
+                        >
+                          Excluir
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-            </div>
-          )}
+                  ))}
+              </div>
+            )}
           </div>
         </div>
       </Modal>
