@@ -1,7 +1,7 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 type EventPayload = {
-  type: string; // "card.moved" | "card.created" | ...
+  type: string; // "card.moved" | "card.created" | "label.added" | "label.removed" | "checklist.completed" | "due.approaching" | "due.past" | "comment.posted" | "attachment.added" | "cover.changed" | "due.changed" | "start.changed" | "card.archived" | "card.restored" | "card.deleted"
   board_id: string;
   card_id: string;
   from_list_id?: string | null;
@@ -18,7 +18,7 @@ type Automation = {
   actions: any[];
 };
 
-export async function dispatchAutomationForEvent(payload: EventPayload) {
+export async function dispatchAutomationForEvent(payload: EventPayload): Promise<number> {
   const supabase = getSupabaseServerClient();
   // busca regras do board habilitadas do tipo 'event'
   const { data: autos } = await supabase
@@ -30,12 +30,14 @@ export async function dispatchAutomationForEvent(payload: EventPayload) {
   const candidates = (autos ?? []).filter((a: any) =>
     matchEvent(a.trigger_config, payload)
   ) as Automation[];
+  let executed = 0;
   for (const a of candidates) {
     try {
       await runActions(supabase, a, payload);
       await supabase
         .from("automation_runs")
         .insert({ automation_id: a.id, status: "ok", payload });
+      executed++;
     } catch (e: any) {
       await supabase
         .from("automation_runs")
@@ -47,6 +49,7 @@ export async function dispatchAutomationForEvent(payload: EventPayload) {
         });
     }
   }
+  return executed;
 }
 
 function matchEvent(config: any, payload: EventPayload) {
@@ -64,6 +67,7 @@ function matchEvent(config: any, payload: EventPayload) {
   if (payload.type === "card.created") {
     if (config.in_list_id && config.in_list_id !== payload.list_id) return false;
   }
+  // Demais eventos atualmente não possuem filtros adicionais
   return true;
 }
 
@@ -232,10 +236,47 @@ async function runActions(
     } else if (type === "comment") {
       const text = String(action.text ?? "").trim();
       if (!text) continue;
+    try {
       await supabase
         .from("card_comments")
-        .insert({ card_id: payload.card_id, content: text })
+        .insert({
+          card_id: payload.card_id,
+          content: text,
+          author_id: (payload as any)?.actor_id ?? null,
+        })
         .throwOnError();
+    } catch (e) {
+      // Fallback: tenta encontrar algum membro do workspace do board para registrar como autor
+      try {
+        const { data: b } = await supabase
+          .from("boards")
+          .select("workspace_id")
+          .eq("id", (payload as any).board_id)
+          .single();
+        if (b?.workspace_id) {
+          const { data: wm } = await supabase
+            .from("workspace_members")
+            .select("user_id")
+            .eq("workspace_id", b.workspace_id)
+            .limit(1);
+          const fallbackUser = wm?.[0]?.user_id as string | undefined;
+          await supabase
+            .from("card_comments")
+            .insert({
+              card_id: payload.card_id,
+              content: text,
+              author_id: fallbackUser ?? null,
+            })
+            .throwOnError();
+        } else {
+          await supabase
+            .from("card_comments")
+            .insert({ card_id: payload.card_id, content: text })
+            .throwOnError();
+        }
+      } catch {}
+    }
+    // também incrementa contador por consistência (realtime deve atualizar, mas garantimos persistência)
     } else if (type === "archive_now") {
       const now = new Date().toISOString();
       await supabase

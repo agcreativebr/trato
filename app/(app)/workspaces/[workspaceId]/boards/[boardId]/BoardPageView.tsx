@@ -46,7 +46,22 @@ export default function BoardPageView() {
   const [automations, setAutomations] = useState<any[]>([]);
   const [autoLoading, setAutoLoading] = useState(false);
   const [autoName, setAutoName] = useState("");
-  const [autoEvent, setAutoEvent] = useState<"card.moved" | "card.created">("card.moved");
+  const [autoEvent, setAutoEvent] = useState<
+    | "card.moved"
+    | "card.created"
+    | "label.added"
+    | "checklist.completed"
+    | "comment.posted"
+    | "attachment.added"
+    | "cover.changed"
+    | "due.changed"
+    | "start.changed"
+    | "card.archived"
+    | "card.restored"
+  >("card.moved");
+  const [autoTab, setAutoTab] = useState<
+    "move" | "changes" | "dates" | "checklists" | "content" | "fields"
+  >("move");
   const [autoToList, setAutoToList] = useState<string>("");
   const [autoLabel, setAutoLabel] = useState<string>("");
   const [autoTriggerLabel, setAutoTriggerLabel] = useState<string>("");
@@ -56,6 +71,18 @@ export default function BoardPageView() {
   );
   const [autoMembers, setAutoMembers] = useState<{ id: string; name: string | null }[]>([]);
   const [autoActions, setAutoActions] = useState<ActionDraft[]>([]);
+
+  // Mapas auxiliares para nomes
+  const listNameById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const l of autoLists) m[l.id] = l.name;
+    return m;
+  }, [autoLists]);
+  const labelNameById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const l of autoLabels) m[l.id] = l.name;
+    return m;
+  }, [autoLabels]);
 
   useEffect(() => {
     if (!showAutomations) return;
@@ -91,6 +118,55 @@ export default function BoardPageView() {
 
   if (loading) {
     return <div className="p-6">Carregando...</div>;
+  }
+
+  // Resumos legíveis (PT-BR) com contexto
+  function summarizeTriggerDetailed(cfg: any): string {
+    const ev = cfg?.event;
+    if (ev === "card.moved") {
+      const list = cfg?.to_list_id ? (listNameById[cfg.to_list_id] ?? "lista destino") : "qualquer lista";
+      return `Quando mover o cartão para “${list}”`;
+    }
+    if (ev === "card.created") {
+      if (!cfg?.in_list_id) return "Quando o cartão for criado no quadro";
+      const list = listNameById[cfg.in_list_id] ?? "lista";
+      return `Quando o cartão for criado em “${list}”`;
+    }
+    if (ev === "label.added") {
+      const lab = cfg?.label_id ? (labelNameById[cfg.label_id] ?? "etiqueta") : "alguma etiqueta";
+      return `Quando a etiqueta “${lab}” for adicionada ao cartão`;
+    }
+    if (ev === "checklist.completed") return "Quando um checklist do cartão for concluído";
+    if (ev === "due.changed") return "Quando a data de entrega do cartão mudar";
+    if (ev === "start.changed") return "Quando a data de início do cartão mudar";
+    if (ev === "comment.posted") return "Quando um comentário for publicado no cartão";
+    if (ev === "attachment.added") return "Quando um anexo for adicionado no cartão";
+    if (ev === "cover.changed") return "Quando a capa do cartão mudar";
+    if (ev === "card.archived") return "Quando o cartão for arquivado";
+    if (ev === "card.restored") return "Quando o cartão for restaurado";
+    if (ev === "card.deleted") return "Quando o cartão for excluído";
+    return String(ev ?? "Evento");
+  }
+  function summarizeActionDetailed(a: any): string {
+    if (!a) return "";
+    if (a.type === "add_label") {
+      const name = a.label_id ? (labelNameById[a.label_id] ?? "etiqueta") : "etiqueta";
+      return `adicionar etiqueta “${name}”`;
+    }
+    if (a.type === "assign_member") return "atribuir membro";
+    if (a.type === "remove_member") return "remover membro";
+    if (a.type === "move_to_list") {
+      const name = a.list_id ? (listNameById[a.list_id] ?? "lista") : "lista";
+      return `mover para “${name}”`;
+    }
+    if (a.type === "set_start_date") return "definir início";
+    if (a.type === "shift_due_by_days") return `ajustar entrega em ${a.days ?? 0} dia(s)`;
+    if (a.type === "create_checklist") return `criar checklist “${a.title ?? "Checklist"}”`;
+    if (a.type === "comment") return `comentar “${(a.text ?? "").toString().slice(0, 40)}”`;
+    if (a.type === "archive_now") return "arquivar cartão";
+    if (a.type === "move_to_top") return "mover para o topo";
+    if (a.type === "move_to_bottom") return "mover para o fim";
+    return a.type;
   }
 
   return (
@@ -336,6 +412,16 @@ export default function BoardPageView() {
                     if (!ids.length) return;
                     await getSupabaseBrowserClient().from("cards").update({ archived_at: null }).in("id", ids);
                     setArchived((prev) => prev.filter((c) => !ids.includes(c.id)));
+                    // emitir evento de restauração para o primeiro cartão (evitar flood)
+                    try {
+                      if (ids[0]) {
+                        await fetch("/api/automations/emit", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ type: "card.restored", card_id: ids[0] }),
+                        });
+                      }
+                    } catch {}
                   }}
                 >
                   Restaurar todos
@@ -364,6 +450,16 @@ export default function BoardPageView() {
                       await sb.from("card_labels").delete().in("card_id", ids);
                       await sb.from("attachments").delete().in("card_id", ids);
                       await sb.from("cards").delete().in("id", ids);
+                      // Dispara um evento para o primeiro cartão (evitar flood)
+                      try {
+                        if (ids[0]) {
+                          await fetch("/api/automations/emit", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ type: "card.deleted", card_id: ids[0] }),
+                          });
+                        }
+                      } catch {}
                     } finally {
                       setArchived((prev) => prev.filter((c) => !ids.includes(c.id)));
                     }
@@ -412,6 +508,13 @@ export default function BoardPageView() {
                             e.stopPropagation();
                             await getSupabaseBrowserClient().from("cards").update({ archived_at: null }).eq("id", c.id);
                             setArchived((prev) => prev.filter((x) => x.id !== c.id));
+                            try {
+                              await fetch("/api/automations/emit", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ type: "card.restored", card_id: c.id }),
+                              });
+                            } catch {}
                           }}
                         >
                           Restaurar
@@ -433,6 +536,13 @@ export default function BoardPageView() {
                               await sb.from("card_labels").delete().eq("card_id", c.id);
                               await sb.from("attachments").delete().eq("card_id", c.id);
                               await sb.from("cards").delete().eq("id", c.id);
+                              try {
+                                await fetch("/api/automations/emit", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ type: "card.deleted", card_id: c.id }),
+                                });
+                              } catch {}
                             } finally {
                               setArchived((prev) => prev.filter((x) => x.id !== c.id));
                             }
@@ -463,6 +573,36 @@ export default function BoardPageView() {
             <div className="text-lg font-semibold mb-3 md:text-left text-center">Automações do quadro</div>
             <div className="mb-4 space-y-2 border rounded-md p-3 bg-white">
               <div className="text-sm font-medium">Criar regra (exemplo)</div>
+              {/* Abas de gatilhos */}
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ["move", "Mover cartão"],
+                  ["changes", "Alterações"],
+                  ["dates", "Datas"],
+                  ["checklists", "Checklists"],
+                  ["content", "Conteúdo"],
+                  ["fields", "Campos"],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={`px-3 py-1 rounded border text-sm ${
+                      autoTab === key ? "bg-neutral-100 border-neutral-300" : "hover:bg-neutral-50"
+                    }`}
+                    onClick={() => {
+                      setAutoTab(key);
+                      // define um evento padrão por aba
+                      if (key === "move") setAutoEvent("card.moved");
+                      else if (key === "changes") setAutoEvent("card.archived");
+                      else if (key === "dates") setAutoEvent("due.changed");
+                      else if (key === "checklists") setAutoEvent("checklist.completed");
+                      else if (key === "content") setAutoEvent("comment.posted");
+                      else setAutoEvent("card.moved");
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-3">
                 <input
                   className="border rounded px-3 py-2 text-sm"
@@ -470,14 +610,58 @@ export default function BoardPageView() {
                   value={autoName}
                   onChange={(e) => setAutoName(e.target.value)}
                 />
-                <select
-                  className="border rounded px-2 py-2 text-sm"
-                  value={autoEvent}
-                  onChange={(e) => setAutoEvent(e.target.value as "card.moved" | "card.created")}
-                >
-                  <option value="card.moved">Quando mover para</option>
-                  <option value="card.created">Quando for criado em</option>
-                </select>
+                {/* Seletor de evento por aba */}
+                {autoTab === "move" && (
+                  <select
+                    className="border rounded px-2 py-2 text-sm"
+                    value={autoEvent}
+                    onChange={(e) => setAutoEvent(e.target.value as any)}
+                  >
+                    <option value="card.moved">Quando mover para</option>
+                    <option value="card.created">Quando for criado em</option>
+                  </select>
+                )}
+                {autoTab === "changes" && (
+                  <select
+                    className="border rounded px-2 py-2 text-sm"
+                    value={autoEvent}
+                    onChange={(e) => setAutoEvent(e.target.value as any)}
+                  >
+                    <option value="card.archived">Quando for arquivado</option>
+                    <option value="card.restored">Quando for restaurado</option>
+                    <option value="label.added">Quando etiqueta for adicionada</option>
+                    <option value="attachment.added">Quando anexo for adicionado</option>
+                    <option value="cover.changed">Quando a capa mudar</option>
+                  </select>
+                )}
+                {autoTab === "dates" && (
+                  <select
+                    className="border rounded px-2 py-2 text-sm"
+                    value={autoEvent}
+                    onChange={(e) => setAutoEvent(e.target.value as any)}
+                  >
+                    <option value="due.changed">Quando a entrega mudar</option>
+                    <option value="start.changed">Quando o início mudar</option>
+                  </select>
+                )}
+                {autoTab === "checklists" && (
+                  <select
+                    className="border rounded px-2 py-2 text-sm"
+                    value={autoEvent}
+                    onChange={(e) => setAutoEvent(e.target.value as any)}
+                  >
+                    <option value="checklist.completed">Quando checklist concluir</option>
+                  </select>
+                )}
+                {autoTab === "content" && (
+                  <select
+                    className="border rounded px-2 py-2 text-sm"
+                    value={autoEvent}
+                    onChange={(e) => setAutoEvent(e.target.value as any)}
+                  >
+                    <option value="comment.posted">Quando um comentário for publicado</option>
+                  </select>
+                )}
                 <select
                   className="border rounded px-2 py-2 text-sm"
                   value={autoToList}
@@ -490,6 +674,20 @@ export default function BoardPageView() {
                     </option>
                   ))}
                 </select>
+                {/* Campo auxiliar quando o evento for label.added */}
+                {autoEvent === "label.added" && (
+                  <select
+                    className="border rounded px-2 py-2 text-sm"
+                    value={autoTriggerLabel || autoLabels[0]?.id || ""}
+                    onChange={(e) => setAutoTriggerLabel(e.target.value)}
+                  >
+                    {autoLabels.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <div className="md:col-span-2 border rounded p-2 space-y-2">
                   <div className="text-xs font-medium text-neutral-700">Ações (executadas em ordem):</div>
                   {autoActions.map((act, idx) => (
@@ -711,16 +909,16 @@ export default function BoardPageView() {
                             board_id: boardId,
                             name: autoName,
                             trigger_type: "event",
-                            trigger_config:
-                              autoEvent === "card.moved"
-                                ? { event: "card.moved", to_list_id: autoToList }
-                                : autoEvent === "card.created"
-                                ? autoToList === "*"
-                                  ? { event: "card.created" }
-                                  : { event: "card.created", in_list_id: autoToList }
-                                : (autoEvent as any) === "label.added"
-                                ? { event: "label.added", label_id: autoTriggerLabel || autoLabels[0]?.id }
-                                : { event: "checklist.completed" },
+                          trigger_config:
+                            autoEvent === "card.moved"
+                              ? { event: "card.moved", to_list_id: autoToList }
+                              : autoEvent === "card.created"
+                              ? autoToList === "*"
+                                ? { event: "card.created" }
+                                : { event: "card.created", in_list_id: autoToList }
+                              : autoEvent === "label.added"
+                              ? { event: "label.added", label_id: autoTriggerLabel || autoLabels[0]?.id }
+                              : { event: autoEvent },
                             actions,
                           }),
                         });
@@ -743,8 +941,15 @@ export default function BoardPageView() {
                 {automations.map((a) => (
                   <div key={a.id} className="border rounded px-3 py-2 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium truncate">{a.name}</div>
-                      <div className="text-xs text-neutral-500">Evento: {a.trigger_config?.event ?? a.trigger_type}</div>
+                      <div className="font-medium truncate">
+                        {a.name || summarizeTriggerDetailed(a.trigger_config)}
+                      </div>
+                      <div className="text-xs text-neutral-500">
+                        Gatilho: {summarizeTriggerDetailed(a.trigger_config)}
+                      </div>
+                      <div className="text-xs text-neutral-500">
+                        Ações: {(a.actions ?? []).map((ac: any) => summarizeActionDetailed(ac)).join(" → ")}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <label className="text-xs inline-flex items-center gap-1">

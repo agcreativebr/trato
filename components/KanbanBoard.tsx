@@ -411,6 +411,33 @@ export function KanbanBoard({
     };
   }, [boardId, supabase, cardsByList, labelsIndex]);
 
+  // Listener opcional para forçar refresh de meta (labels/comentários) de um cartão
+  useEffect(() => {
+    async function onRefreshMeta(e: any) {
+      const cardId = e?.detail?.cardId as string | undefined;
+      if (!cardId) return;
+      const { data: cls } = await supabase
+        .from("card_labels")
+        .select("label_id")
+        .eq("card_id", cardId);
+      const labs = (cls ?? [])
+        .map((x: any) => labelsIndex[x.label_id])
+        .filter(Boolean);
+      setLabelsByCard((prev) => ({ ...prev, [cardId]: labs as any }));
+      const { count } = await supabase
+        .from("card_comments")
+        .select("*", { count: "exact", head: true })
+        .eq("card_id", cardId);
+      setCommentsCountByCard((prev) => ({
+        ...prev,
+        [cardId]: typeof count === "number" ? count : prev[cardId] ?? 0,
+      }));
+    }
+    window.addEventListener("card:refresh-meta", onRefreshMeta as any);
+    return () =>
+      window.removeEventListener("card:refresh-meta", onRefreshMeta as any);
+  }, [supabase, labelsIndex]);
+
   async function addList() {
     const name = prompt("Nome da lista:")?.trim();
     if (!name) return;

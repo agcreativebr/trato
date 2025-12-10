@@ -184,6 +184,67 @@ export function CardModal({
     };
   }, [open, cardId, boardId, supabase]);
 
+  // Realtime de comentários para refletir automações imediatamente
+  useEffect(() => {
+    if (!open || !cardId) return;
+    const channel = supabase
+      .channel(`cmts:${cardId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "card_comments",
+          filter: `card_id=eq.${cardId}`,
+        },
+        (payload: any) => {
+          const row = payload.new as {
+            id: string;
+            content: string;
+            created_at: string;
+          };
+          setComments((prev) => [row, ...prev]);
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [open, cardId, supabase]);
+
+  // Realtime de etiquetas (card_labels) para marcar/desmarcar em tempo real no popup
+  useEffect(() => {
+    if (!open || !cardId) return;
+    const ch = supabase
+      .channel(`labels:${cardId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "card_labels",
+          filter: `card_id=eq.${cardId}`,
+        },
+        (payload: any) => {
+          const insertedId = payload?.new?.label_id as string | undefined;
+          const deletedId = payload?.old?.label_id as string | undefined;
+          setCardLabelIds((prev) => {
+            if (payload.eventType === "INSERT" && insertedId) {
+              return prev.includes(insertedId) ? prev : [...prev, insertedId];
+            }
+            if (payload.eventType === "DELETE" && deletedId) {
+              return prev.filter((id) => id !== deletedId);
+            }
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [open, cardId, supabase]);
+
   async function toggleLabel(labelId: string) {
     const op = cardLabelIds.includes(labelId) ? "remove" : "add";
     await fetch("/api/card-labels", {
@@ -214,12 +275,20 @@ export function CardModal({
 
   async function saveDueDate(value: string) {
     const iso = value ? new Date(value).toISOString() : null;
-    await supabase.from("cards").update({ due_date: iso }).eq("id", cardId);
+    await fetch("/api/cards/dates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card_id: cardId, due_date: iso }),
+    });
     setDueDate(iso);
   }
   async function saveStartDate(value: string) {
     const iso = value ? new Date(value).toISOString() : null;
-    await supabase.from("cards").update({ start_date: iso }).eq("id", cardId);
+    await fetch("/api/cards/dates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card_id: cardId, start_date: iso }),
+    });
     setStartDate(iso);
   }
 
@@ -283,7 +352,16 @@ export function CardModal({
         .insert({ card_id: cardId, filename: file.name, path })
         .select("*")
         .single();
-      if (data) setAttachments((prev) => [data as any, ...prev]);
+      if (data) {
+        setAttachments((prev) => [data as any, ...prev]);
+        try {
+          await fetch("/api/automations/emit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "attachment.added", card_id: cardId }),
+          });
+        } catch {}
+      }
     }
   }
   async function setCover(path: string) {
@@ -292,10 +370,24 @@ export function CardModal({
       .from("attachments")
       .createSignedUrl(path, 60 * 10);
     setCoverUrl(data?.signedUrl ?? null);
+    try {
+      await fetch("/api/automations/emit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "cover.changed", card_id: cardId }),
+      });
+    } catch {}
   }
   async function clearCover() {
     await supabase.from("cards").update({ cover_path: null }).eq("id", cardId);
     setCoverUrl(null);
+    try {
+      await fetch("/api/automations/emit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "cover.changed", card_id: cardId }),
+      });
+    } catch {}
   }
 
   async function moveCard() {
@@ -348,6 +440,13 @@ export function CardModal({
     const now = new Date().toISOString();
     await supabase.from("cards").update({ archived_at: now }).eq("id", cardId);
     onClose();
+    try {
+      await fetch("/api/automations/emit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "card.archived", card_id: cardId }),
+      });
+    } catch {}
   }
 
   async function addComment() {
@@ -364,6 +463,13 @@ export function CardModal({
       .single();
     if (data) setComments((prev) => [data as any, ...prev]);
     setComment("");
+    try {
+      await fetch("/api/automations/emit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "comment.posted", card_id: cardId }),
+      });
+    } catch {}
   }
 
   function fmtInputDate(value: string | null) {
@@ -720,20 +826,50 @@ export function CardModal({
                     onSave={async (v) => {
                       const toIso = (s: string | "") =>
                         s ? new Date(s).toISOString() : null;
-                      const payload: any = {
-                        start_date: toIso(v.start),
-                        due_date: toIso(v.due),
-                        recurrence: v.recurrence,
-                        reminder_minutes: v.reminder === "" ? null : v.reminder,
-                      };
+                      const startIso = toIso(v.start);
+                      const dueIso = toIso(v.due);
+                      // Atualiza datas via API para disparar automações no servidor
+                      const res = await fetch("/api/cards/dates", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          card_id: cardId,
+                          start_date: startIso,
+                          due_date: dueIso,
+                        }),
+                      });
+                      try {
+                        const json = await res.json();
+                        if (json?.triggered > 0) {
+                          window.dispatchEvent(
+                            new CustomEvent("card:refresh-meta", {
+                              detail: { cardId },
+                            })
+                          );
+                          // Recarrega lista de comentários como redundância ao realtime
+                          const { data: cms } = await supabase
+                            .from("card_comments")
+                            .select("id, content, created_at")
+                            .eq("card_id", cardId)
+                            .order("created_at", { ascending: false });
+                          setComments(cms ?? []);
+                        }
+                      } catch {}
+                      // Atualiza demais campos diretamente
                       await supabase
                         .from("cards")
-                        .update(payload)
+                        .update({
+                          recurrence: v.recurrence,
+                          reminder_minutes:
+                            v.reminder === "" ? null : v.reminder,
+                        })
                         .eq("id", cardId);
-                      setStartDate(payload.start_date);
-                      setDueDate(payload.due_date);
-                      setRecurrence(payload.recurrence);
-                      setReminderMinutes(payload.reminder_minutes);
+                      setStartDate(startIso);
+                      setDueDate(dueIso);
+                      setRecurrence(v.recurrence);
+                      setReminderMinutes(
+                        v.reminder === "" ? null : (v.reminder as number)
+                      );
                     }}
                   />
                 </div>
