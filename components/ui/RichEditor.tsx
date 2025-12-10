@@ -4,10 +4,8 @@ import StarterKit from "@tiptap/starter-kit";
 import BulletList from "@tiptap/extension-bullet-list";
 import OrderedList from "@tiptap/extension-ordered-list";
 import ListItem from "@tiptap/extension-list-item";
-import Link from "@tiptap/extension-link";
-import Underline from "@tiptap/extension-underline";
+// Link/Underline/Heading já vêm com o StarterKit nesta versão; evitar duplicar
 import TextAlign from "@tiptap/extension-text-align";
-import Heading from "@tiptap/extension-heading";
 import Placeholder from "@tiptap/extension-placeholder";
 // Removido CodeBlockLowlight para evitar erro de runtime com lowlight
 import { useEffect, useRef, useState } from "react";
@@ -78,14 +76,12 @@ export function RichEditor({ value, onChange, placeholder }: Props) {
         bulletList: false,
         orderedList: false,
         listItem: false,
+        heading: { levels: [1, 2, 3, 4] },
       }),
       BulletList,
       OrderedList,
       ListItem,
-      Underline,
-      Link.configure({ openOnClick: true }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Heading.configure({ levels: [1, 2, 3, 4] }),
       Placeholder.configure({ placeholder: placeholder ?? "Escreva aqui..." }),
       Mention.configure({
         HTMLAttributes: { class: "mention" },

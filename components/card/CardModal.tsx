@@ -185,19 +185,15 @@ export function CardModal({
   }, [open, cardId, boardId, supabase]);
 
   async function toggleLabel(labelId: string) {
-    if (cardLabelIds.includes(labelId)) {
-      await supabase
-        .from("card_labels")
-        .delete()
-        .eq("card_id", cardId)
-        .eq("label_id", labelId);
-      setCardLabelIds((prev) => prev.filter((id) => id !== labelId));
-    } else {
-      await supabase
-        .from("card_labels")
-        .insert({ card_id: cardId, label_id: labelId });
-      setCardLabelIds((prev) => [...prev, labelId]);
-    }
+    const op = cardLabelIds.includes(labelId) ? "remove" : "add";
+    await fetch("/api/card-labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card_id: cardId, label_id: labelId, op }),
+    });
+    setCardLabelIds((prev) =>
+      op === "add" ? [...prev, labelId] : prev.filter((id) => id !== labelId)
+    );
   }
 
   async function createLabel() {
@@ -261,11 +257,13 @@ export function CardModal({
   }
 
   async function toggleChecklistItem(item: ChecklistItem) {
-    const updated = !item.done;
-    await supabase
-      .from("checklist_items")
-      .update({ done: updated })
-      .eq("id", item.id);
+    const res = await fetch("/api/checklist-items/toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item_id: item.id }),
+    });
+    const json = await res.json();
+    const updated = !!json.done;
     setItemsByChecklist((prev) => ({
       ...prev,
       [item.checklist_id]: (prev[item.checklist_id] ?? []).map((it) =>
