@@ -23,6 +23,8 @@ import {
   setCachedSignedUrl,
 } from "@/lib/storage-url-cache";
 
+const ENABLE_MENTIONS = false;
+
 // cache simples para URLs assinadas (evita sumiço da capa ao abrir o modal)
 const signedUrlCache: Map<string, { url: string; expiresAt: number }> =
   new Map();
@@ -77,6 +79,13 @@ export function CardModal({
   const [comment, setComment] = useState("");
   const [comments, setComments] = useState<
     { id: string; content: string; created_at: string }[]
+  >([]);
+  const mentionAnchorRef = useRef<HTMLDivElement | null>(null);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionResults, setMentionResults] = useState<
+    { id: string; display_name: string | null }[]
   >([]);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [lists, setLists] = useState<{ id: string; name: string }[]>([]);
@@ -473,6 +482,77 @@ export function CardModal({
     } catch {}
   }
 
+  function updateMentionState(next: string, caret: number) {
+    if (!ENABLE_MENTIONS) return;
+    const upto = next.slice(0, caret);
+    const at = upto.lastIndexOf("@");
+    if (at === -1) {
+      setMentionOpen(false);
+      setMentionQuery("");
+      setMentionResults([]);
+      setMentionIndex(0);
+      return;
+    }
+    const after = upto.slice(at + 1);
+    // encerra se espaço/linha/sem consulta
+    if (/\s/.test(after) || after.length < 2) {
+      setMentionOpen(false);
+      setMentionQuery("");
+      setMentionResults([]);
+      setMentionIndex(0);
+      return;
+    }
+    setMentionQuery(after);
+    // buscar perfis
+    const q = encodeURIComponent(after);
+    fetch(`/api/user_profiles/search?q=${q}`)
+      .then((r) => r.json())
+      .then((json) => {
+        const arr =
+          (json?.data as any[])?.map((u) => ({
+            id: u.id,
+            display_name: u.display_name ?? null,
+          })) ?? [];
+        setMentionResults(arr);
+        setMentionIndex(0);
+        setMentionOpen(arr.length > 0);
+      })
+      .catch(() => {
+        setMentionResults([]);
+        setMentionIndex(0);
+        setMentionOpen(false);
+      });
+  }
+
+  function insertMention(choice: { id: string; display_name: string | null }) {
+    const ta = textareaRef.current;
+    const name = choice.display_name ?? choice.id;
+    if (!ta) return;
+    const caret = ta.selectionStart ?? comment.length;
+    const upto = comment.slice(0, caret);
+    const at = upto.lastIndexOf("@");
+    if (at === -1) return;
+    const before = comment.slice(0, at);
+    const afterAll = comment.slice(caret);
+    const inserted = `@${name} `;
+    const next = `${before}${inserted}${afterAll}`;
+    setComment(next);
+    setMentionOpen(false);
+    setMentionQuery("");
+    setMentionResults([]);
+    setMentionIndex(0);
+    // posiciona o caret após a menção
+    requestAnimationFrame(() => {
+      try {
+        const pos = before.length + inserted.length;
+        ta.setSelectionRange(pos, pos);
+        ta.focus();
+      } catch {}
+    });
+  }
+
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
   function fmtInputDate(value: string | null) {
     if (!value) return "";
     const d = new Date(value);
@@ -676,15 +756,75 @@ export function CardModal({
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Comentários</label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2" ref={mentionAnchorRef}>
                     <TextareaAutosize
+                      ref={textareaRef as any}
                       className="flex-1 border rounded px-3 py-2"
                       placeholder="Escreva um comentário (Markdown habilitado)..."
                       value={comment}
-                      onChange={(e) => setComment(e.target.value)}
+                      onChange={(e) => {
+                        setComment(e.target.value);
+                        if (ENABLE_MENTIONS) {
+                          const caret =
+                            (e.target as HTMLTextAreaElement).selectionStart ??
+                            e.target.value.length;
+                          updateMentionState(e.target.value, caret);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (!ENABLE_MENTIONS || !mentionOpen) return;
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          setMentionIndex((i) =>
+                            Math.min(i + 1, Math.max(mentionResults.length - 1, 0))
+                          );
+                        } else if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setMentionIndex((i) => Math.max(i - 1, 0));
+                        } else if (e.key === "Enter") {
+                          e.preventDefault();
+                          const choice = mentionResults[mentionIndex];
+                          if (choice) insertMention(choice);
+                        } else if (e.key === "Escape") {
+                          setMentionOpen(false);
+                        }
+                      }}
                     />
                     <SendCommentButton onSend={addComment} />
                   </div>
+                  {ENABLE_MENTIONS && (
+                    <Popover
+                      open={mentionOpen}
+                      onClose={() => setMentionOpen(false)}
+                      anchorRect={mentionAnchorRef.current?.getBoundingClientRect()}
+                      width={320}
+                    >
+                      <div className="p-2">
+                        <div className="text-xs text-neutral-600 mb-1">
+                          Mencionar: @{mentionQuery}
+                        </div>
+                        {mentionResults.length === 0 ? (
+                          <div className="text-sm text-neutral-500 px-1 py-1">
+                            Nenhum resultado
+                          </div>
+                        ) : (
+                          <div className="max-h-64 overflow-auto">
+                            {mentionResults.map((u, i) => (
+                              <button
+                                key={u.id}
+                                className={`w-full text-left px-2 py-1 rounded text-sm ${
+                                  i === mentionIndex ? "bg-neutral-100" : "hover:bg-neutral-50"
+                                }`}
+                                onClick={() => insertMention(u)}
+                              >
+                                {u.display_name ?? u.id}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </Popover>
+                  )}
                   <div className="space-y-2">
                     {comments.map((c) => (
                       <div key={c.id} className="text-sm border rounded p-2">
