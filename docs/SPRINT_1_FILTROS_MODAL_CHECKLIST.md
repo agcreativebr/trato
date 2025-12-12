@@ -7,7 +7,7 @@ Período: 1 sprint
 - UI: barra de filtros persistida em querystring; contagem de cartões filtrados
 - API/DB: filtros no client (Supabase) com índices nas colunas chave; considerar materializar views se necessário
 - DoD:
-  - Combinação de filtros funciona sem recarregar
+  - Combinação de filtros funciona sem recarregar (texto, etiquetas, membros, vencimento)
   - Estado preservado na URL
   - Desempenho aceitável com 1k+ cartões
 

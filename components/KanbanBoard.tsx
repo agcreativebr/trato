@@ -19,10 +19,13 @@ import { KanbanList } from "./KanbanList";
 import { KanbanCard } from "./KanbanCard";
 import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 import { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
-import { Plus } from "lucide-react";
+import { Plus, Filter } from "lucide-react";
 import { CardModal } from "@/components/card/CardModal";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { setCachedSignedUrl } from "@/lib/storage-url-cache";
+import { Popover } from "@/components/ui/Popover";
+import { Button } from "@/components/ui/Button";
+import * as React from "react";
 
 export type Card = {
   id: string;
@@ -70,7 +73,10 @@ export function KanbanBoard({
   );
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [membersByCard, setMembersByCard] = useState<
-    Record<string, { name?: string | null; avatar_url?: string | null }[]>
+    Record<
+      string,
+      { id?: string; name?: string | null; avatar_url?: string | null }[]
+    >
   >({});
   const [labelsIndex, setLabelsIndex] = useState<
     Record<string, { id: string; name: string; color: string }>
@@ -474,6 +480,74 @@ export function KanbanBoard({
     });
   }
 
+  // Filtros do quadro
+  const [filters, setFilters] = useState<{
+    query: string;
+    labelIds: string[];
+    memberIds: string[];
+    due: "all" | "overdue" | "today" | "week" | "none";
+  }>({
+    query: "",
+    labelIds: [],
+    memberIds: [],
+    due: "all",
+  });
+  const labelsAnchorRef = React.useRef<HTMLButtonElement | null>(null);
+  const membersAnchorRef = React.useRef<HTMLButtonElement | null>(null);
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+
+  const allMembers = useMemo(() => {
+    const map = new Map<string, { id: string; name: string | null }>();
+    for (const arr of Object.values(membersByCard)) {
+      for (const m of arr ?? []) {
+        if (!m?.id) continue;
+        if (!map.has(m.id)) map.set(m.id, { id: m.id, name: m.name ?? null });
+      }
+    }
+    return Array.from(map.values());
+  }, [membersByCard]);
+
+  function cardMatchesFilters(card: Card) {
+    const q = filters.query.trim().toLowerCase();
+    if (q) {
+      const title = (card.title ?? "").toLowerCase();
+      const desc = (card.description ?? "").toLowerCase();
+      if (!title.includes(q) && !desc.includes(q)) return false;
+    }
+    if (filters.labelIds.length) {
+      const labs = labelsByCard[card.id] ?? [];
+      const labSet = new Set(labs.map((l) => l.id));
+      const match = filters.labelIds.some((id) => labSet.has(id));
+      if (!match) return false;
+    }
+    if (filters.memberIds.length) {
+      const ms = membersByCard[card.id] ?? [];
+      const mSet = new Set(ms.map((m) => m.id).filter(Boolean) as string[]);
+      const match = filters.memberIds.some((id) => mSet.has(id));
+      if (!match) return false;
+    }
+    if (filters.due !== "all") {
+      const d = card.due_date ? new Date(card.due_date) : null;
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      if (filters.due === "none") {
+        if (d) return false;
+      } else if (!d) {
+        return false;
+      } else if (filters.due === "overdue") {
+        if (d.getTime() >= now.getTime()) return false;
+      } else if (filters.due === "today") {
+        if (d.getTime() < startOfToday.getTime() || d.getTime() > endOfToday.getTime()) return false;
+      } else if (filters.due === "week") {
+        const in7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        if (d.getTime() < startOfToday.getTime() || d.getTime() > in7.getTime()) return false;
+      }
+    }
+    return true;
+  }
+
   function findCardLocation(
     cardId: string
   ): { listIndex: number; cardIndex: number } | null {
@@ -649,7 +723,125 @@ export function KanbanBoard({
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto overflow-y-hidden pb-6 px-6 mt-4 h-full">
+    <div className="px-6 mt-4 h-full flex flex-col gap-3">
+      <div className="w-full bg-white/80 backdrop-blur border border-neutral-200 rounded-xl px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-2">
+            <Filter size={16} />
+            <span className="text-sm font-medium">Filtros</span>
+          </div>
+          <input
+            className="border rounded px-2 py-1 text-sm"
+            placeholder="Buscar (título ou descrição)"
+            value={filters.query}
+            onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))}
+          />
+          <button
+            ref={labelsAnchorRef}
+            className="px-2 py-1 text-sm rounded border hover:bg-neutral-50"
+            onClick={() => setLabelsOpen(true)}
+            title="Filtrar por etiquetas"
+          >
+            Etiquetas
+          </button>
+          <Popover
+            open={labelsOpen}
+            onClose={() => setLabelsOpen(false)}
+            anchorRect={labelsAnchorRef.current?.getBoundingClientRect()}
+            width={260}
+          >
+            <div className="p-2 space-y-1">
+              <div className="text-sm font-semibold px-1">Etiquetas</div>
+              <div className="max-h-60 overflow-auto pr-1">
+                {Object.values(labelsIndex).length === 0 && (
+                  <div className="text-sm text-neutral-500 px-1 py-1">Nenhuma etiqueta</div>
+                )}
+                {Object.values(labelsIndex).map((l) => (
+                  <label key={l.id} className="flex items-center gap-2 px-1 py-1 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={filters.labelIds.includes(l.id)}
+                      onChange={(e) => {
+                        setFilters((f) => {
+                          const set = new Set(f.labelIds);
+                          if (e.target.checked) set.add(l.id);
+                          else set.delete(l.id);
+                          return { ...f, labelIds: Array.from(set) };
+                        });
+                      }}
+                    />
+                    <span
+                      className="inline-block h-3 w-6 rounded-full border"
+                      style={{ backgroundColor: l.color }}
+                    />
+                    <span className="truncate">{l.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </Popover>
+          <button
+            ref={membersAnchorRef}
+            className="px-2 py-1 text-sm rounded border hover:bg-neutral-50"
+            onClick={() => setMembersOpen(true)}
+            title="Filtrar por membros"
+          >
+            Membros
+          </button>
+          <Popover
+            open={membersOpen}
+            onClose={() => setMembersOpen(false)}
+            anchorRect={membersAnchorRef.current?.getBoundingClientRect()}
+            width={260}
+          >
+            <div className="p-2 space-y-1">
+              <div className="text-sm font-semibold px-1">Membros</div>
+              <div className="max-h-60 overflow-auto pr-1">
+                {allMembers.length === 0 && (
+                  <div className="text-sm text-neutral-500 px-1 py-1">Nenhum membro</div>
+                )}
+                {allMembers.map((m) => (
+                  <label key={m.id} className="flex items-center gap-2 px-1 py-1 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={filters.memberIds.includes(m.id)}
+                      onChange={(e) => {
+                        setFilters((f) => {
+                          const set = new Set(f.memberIds);
+                          if (e.target.checked) set.add(m.id);
+                          else set.delete(m.id);
+                          return { ...f, memberIds: Array.from(set) };
+                        });
+                      }}
+                    />
+                    <span className="truncate">{m.name ?? m.id}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </Popover>
+          <select
+            className="border rounded px-2 py-1 text-sm"
+            value={filters.due}
+            onChange={(e) => setFilters((f) => ({ ...f, due: e.target.value as any }))}
+            title="Vencimento"
+          >
+            <option value="all">Todas as datas</option>
+            <option value="overdue">Atrasados</option>
+            <option value="today">Hoje</option>
+            <option value="week">Próximos 7 dias</option>
+            <option value="none">Sem data</option>
+          </select>
+          <Button
+            variant="ghost"
+            onClick={() => setFilters({ query: "", labelIds: [], memberIds: [], due: "all" })}
+          >
+            Limpar
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex gap-4 overflow-x-auto overflow-y-hidden pb-6 h-full">
       <DndContext
         sensors={sensors}
         collisionDetection={rectIntersection}
@@ -673,7 +865,9 @@ export function KanbanBoard({
                   boardId={boardId}
                   workspaceId={workspaceId}
                   cards={
-                    (cardsByList[l.id] ?? []).map((c) => ({
+                    (cardsByList[l.id] ?? [])
+                      .filter(cardMatchesFilters)
+                      .map((c) => ({
                       ...c,
                       onOpen: () => setOpenCardId(c.id),
                       members: membersByCard[c.id] ?? [],
@@ -908,6 +1102,7 @@ export function KanbanBoard({
         open={!!openCardId}
         onClose={() => setOpenCardId(null)}
       />
+    </div>
     </div>
   );
 }
