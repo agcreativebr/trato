@@ -170,7 +170,7 @@ export default function BoardPageView() {
   }
 
   return (
-    <div className="pb-2">
+    <div className="h-full flex flex-col overflow-hidden pb-2">
       <div className="px-6 py-4 bg-gradient-to-r from-indigo-50 via-white to-purple-50 border-b">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -366,7 +366,9 @@ export default function BoardPageView() {
         </div>
       </div>
 
-      <KanbanBoard boardId={boardId} workspaceId={workspaceId} />
+      <div className="flex-1 min-h-0">
+        <KanbanBoard boardId={boardId} workspaceId={workspaceId} />
+      </div>
 
       <Modal open={showArchived} onClose={() => setShowArchived(false)}>
         <div className="p-4 w-[980px] max-w-[98vw] relative">

@@ -649,7 +649,7 @@ export function KanbanBoard({
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-6 px-6 mt-4">
+    <div className="flex gap-4 overflow-x-auto overflow-y-hidden pb-6 px-6 mt-4 h-full">
       <DndContext
         sensors={sensors}
         collisionDetection={rectIntersection}

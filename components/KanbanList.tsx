@@ -146,7 +146,7 @@ export function KanbanList({
       style={{ ...style, touchAction: "none" }}
       className={`w-80 min-w-[20rem] bg-white/90 backdrop-blur border ${
         isOver ? "border-blue-400" : "border-neutral-200"
-      } rounded-xl p-3 shadow-elevated hover:shadow-floating transition-all duration-250 ease-soft`}
+      } rounded-xl p-3 shadow-elevated hover:shadow-floating transition-all duration-250 ease-soft flex flex-col max-h-full`}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
     >
@@ -259,7 +259,7 @@ export function KanbanList({
           </div>
         </div>
       )}
-      <div className="space-y-2" ref={setNodeRef as React.Ref<HTMLDivElement>}>
+      <div className="space-y-2 overflow-y-auto max-h-full pr-1" ref={setNodeRef as React.Ref<HTMLDivElement>}>
         <SortableContext
           items={cards.map((c) => `${list.id}:${c.id}`)}
           strategy={verticalListSortingStrategy}
