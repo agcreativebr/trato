@@ -7,5 +7,6 @@
 ### 2025-12-12
 - Filtros do quadro (texto, etiquetas, membros, vencimento) adicionados em `components/KanbanBoard.tsx` com barra de filtros e popovers.
 - Atualização do mapeamento de membros por cartão para incluir `id` (suporte a filtro por membro).
+- Menções no modal de cartão desativadas temporariamente até existir gestão de membros/convites (flag `ENABLE_MENTIONS=false`).
 
 
