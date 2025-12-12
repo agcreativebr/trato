@@ -5,8 +5,9 @@ import { getSupabaseBrowserClient } from '@/lib/supabase-client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { LogOut, Plus } from 'lucide-react';
+import { LogOut, Plus, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Modal } from '@/components/ui/Modal';
 
 type Workspace = { id: string; name: string; created_at: string };
 type Board = { id: string; name: string; workspace_id: string; created_at: string };
@@ -20,6 +21,12 @@ export default function DashboardPage() {
 	const [newWorkspaceName, setNewWorkspaceName] = useState('');
 	const [creating, setCreating] = useState(false);
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
+	const [membersOpen, setMembersOpen] = useState(false);
+	const [membersLoading, setMembersLoading] = useState(false);
+	const [members, setMembers] = useState<{ user_id: string; role: 'admin'|'editor'|'viewer'; profile?: { display_name?: string|null; avatar_url?: string|null } | null }[]>([]);
+	const [targetWorkspaceId, setTargetWorkspaceId] = useState<string | null>(null);
+	const [inviteEmail, setInviteEmail] = useState('');
+	const [inviteRole, setInviteRole] = useState<'admin'|'editor'|'viewer'>('editor');
 
 	useEffect(() => {
 		let mounted = true;
@@ -67,6 +74,71 @@ export default function DashboardPage() {
 		} finally {
 			setCreating(false);
 		}
+	}
+
+	async function openMembers(wsId: string) {
+		setTargetWorkspaceId(wsId);
+		setMembersOpen(true);
+		setMembersLoading(true);
+		try {
+			const res = await fetch(`/api/workspaces/members?workspaceId=${wsId}`);
+			const json = await res.json();
+			setMembers(json.data ?? []);
+	+	} finally {
+			setMembersLoading(false);
+		}
+	}
+
+	async function addMember() {
+		if (!targetWorkspaceId || !inviteEmail.trim()) return;
+		setMembersLoading(true);
+		try {
+			const res = await fetch('/api/workspaces/members', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ workspace_id: targetWorkspaceId, email: inviteEmail.trim(), role: inviteRole }),
+			});
+			const json = await res.json();
+			if (json?.error) {
+				alert(json.error);
+				return;
+			}
+			setInviteEmail('');
+			await openMembers(targetWorkspaceId);
+		} finally {
+			setMembersLoading(false);
+		}
+	}
+
+	async function updateRole(userId: string, role: 'admin'|'editor'|'viewer') {
+		if (!targetWorkspaceId) return;
+		const res = await fetch('/api/workspaces/members', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ workspace_id: targetWorkspaceId, user_id: userId, role }),
+		});
+		const json = await res.json();
+		if (json?.error) {
+			alert(json.error);
+			return;
+		}
+		setMembers((prev) => prev.map((m) => (m.user_id === userId ? { ...m, role } : m)));
+	}
+
+	async function removeMember(userId: string) {
+		if (!targetWorkspaceId) return;
+		if (!confirm('Remover este membro do workspace?')) return;
+		const res = await fetch('/api/workspaces/members', {
+			method: 'DELETE',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ workspace_id: targetWorkspaceId, user_id: userId }),
+		});
+		const json = await res.json();
+		if (json?.error) {
+			alert(json.error);
+			return;
+		}
+		setMembers((prev) => prev.filter((m) => m.user_id !== userId));
 	}
 
 	async function createBoard(workspaceId: string) {
@@ -131,9 +203,14 @@ export default function DashboardPage() {
 						>
 							<div className="flex items-center justify-between mb-3">
 								<h3 className="font-semibold">{ws.name}</h3>
-								<Button variant="ghost" size="sm" leftIcon={<Plus size={16} />} onClick={() => createBoard(ws.id)}>
-									Board
-								</Button>
+								<div className="flex items-center gap-2">
+									<Button variant="ghost" size="sm" leftIcon={<Users size={16} />} onClick={() => openMembers(ws.id)}>
+										Membros
+									</Button>
+									<Button variant="ghost" size="sm" leftIcon={<Plus size={16} />} onClick={() => createBoard(ws.id)}>
+										Board
+									</Button>
+								</div>
 							</div>
 							<div className="space-y-2">
 								{(boardsByWorkspace[ws.id] ?? []).map((b) => (
@@ -153,6 +230,67 @@ export default function DashboardPage() {
 					))}
 				</div>
 			</section>
+
+			<Modal open={membersOpen} onClose={() => setMembersOpen(false)}>
+				<div className="p-4 w-[720px] max-w-[96vw]">
+					<div className="flex items-center justify-between mb-3">
+						<div className="text-lg font-semibold">Membros do workspace</div>
+						<button className="h-8 w-8 inline-flex items-center justify-center rounded hover:bg-neutral-100" onClick={() => setMembersOpen(false)}>×</button>
+					</div>
+					<div className="space-y-3">
+						<div className="flex flex-wrap items-center gap-2">
+							<input
+								className="border rounded px-3 py-2 flex-1 min-w-[220px]"
+								placeholder="E-mail do usuário (já cadastrado)"
+								value={inviteEmail}
+								onChange={(e) => setInviteEmail(e.target.value)}
+							/>
+							<select className="border rounded px-2 py-2" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as any)}>
+								<option value="editor">Editor</option>
+								<option value="admin">Admin</option>
+								<option value="viewer">Observador</option>
+							</select>
+							<Button isLoading={membersLoading} onClick={addMember}>Adicionar</Button>
+						</div>
+						<div className="border rounded">
+							{membersLoading ? (
+								<div className="p-3 text-sm text-neutral-600">Carregando membros…</div>
+							) : members.length === 0 ? (
+								<div className="p-3 text-sm text-neutral-600">Nenhum membro.</div>
+							) : (
+								<table className="w-full text-sm">
+									<thead>
+										<tr className="text-left border-b">
+											<th className="px-3 py-2">Usuário</th>
+											<th className="px-3 py-2">Papel</th>
+											<th className="px-3 py-2 text-right">Ações</th>
+										</tr>
+									</thead>
+									<tbody>
+										{members.map((m) => (
+											<tr key={m.user_id} className="border-b">
+												<td className="px-3 py-2">
+													{m.profile?.display_name ?? m.user_id}
+												</td>
+												<td className="px-3 py-2">
+													<select className="border rounded px-2 py-1" value={m.role} onChange={(e) => updateRole(m.user_id, e.target.value as any)}>
+														<option value="admin">Admin</option>
+														<option value="editor">Editor</option>
+														<option value="viewer">Observador</option>
+													</select>
+												</td>
+												<td className="px-3 py-2 text-right">
+													<Button variant="ghost" size="sm" onClick={() => removeMember(m.user_id)}>Remover</Button>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							)}
+						</div>
+					</div>
+				</div>
+			</Modal>
 		</div>
 	);
 }
