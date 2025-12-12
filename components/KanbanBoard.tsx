@@ -65,7 +65,7 @@ export function KanbanBoard({
   boardId: string;
   workspaceId: string;
 }) {
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => getSupabaseBrowserClient() as any, []);
   const [lists, setLists] = useState<List[]>([]);
   const [cardsByList, setCardsByList] = useState<Record<string, Card[]>>({});
   const sensors = useSensors(
@@ -141,7 +141,7 @@ export function KanbanBoard({
       setLists(ls ?? []);
       const map: Record<string, Card[]> = {};
       for (const l of ls ?? []) {
-        map[l.id] = (cs ?? []).filter((c) => c.list_id === l.id);
+        map[l.id] = (cs ?? []).filter((c: any) => c.list_id === l.id);
       }
       setCardsByList(map);
       // Prefetch das capas para evitar latência ao abrir modal
@@ -164,7 +164,7 @@ export function KanbanBoard({
       }
 
       // fetch members for all cards
-      const cardIds = (cs ?? []).map((c) => c.id);
+      const cardIds = (cs ?? []).map((c: any) => c.id);
       if (cardIds.length) {
         const { data: cm } = await supabase
           .from("card_members")
@@ -184,7 +184,7 @@ export function KanbanBoard({
         > = {};
         for (const c of cm ?? []) {
           byCard[c.card_id] = byCard[c.card_id] ?? [];
-          const prof = pMap.get(c.user_id);
+          const prof = pMap.get(c.user_id) as any;
           byCard[c.card_id].push({
             name: prof?.display_name ?? null,
             avatar_url: prof?.avatar_url ?? null,
@@ -215,7 +215,7 @@ export function KanbanBoard({
         { id: string; name: string; color: string }[]
       > = {};
       for (const cl of cardLabels ?? []) {
-        const lab = labelMap.get(cl.label_id);
+        const lab = labelMap.get(cl.label_id) as any;
         if (!lab) continue;
         byCardLabels[cl.card_id] = byCardLabels[cl.card_id] ?? [];
         byCardLabels[cl.card_id].push({

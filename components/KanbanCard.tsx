@@ -84,7 +84,7 @@ export function KanbanCard({
   async function handleAttach(file: File) {
     setUploading(true);
     try {
-      const supabase = getSupabaseBrowserClient();
+      const supabase = getSupabaseBrowserClient() as any;
       const path = `${card.id}/${Date.now()}_${file.name}`;
       const { error } = await supabase.storage
         .from("attachments")
@@ -92,7 +92,7 @@ export function KanbanCard({
       if (!error) {
         await supabase
           .from("attachments")
-          .insert({ card_id: card.id, filename: file.name, path });
+          .insert({ card_id: card.id, filename: file.name, path } as any);
       }
     } finally {
       setUploading(false);

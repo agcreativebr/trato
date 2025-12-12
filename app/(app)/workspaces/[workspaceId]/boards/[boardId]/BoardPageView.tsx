@@ -26,7 +26,7 @@ export default function BoardPageView() {
   const params = useParams();
   const workspaceId = params?.workspaceId as string;
   const boardId = params?.boardId as string;
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => getSupabaseBrowserClient() as any, []);
   const [loading, setLoading] = useState(true);
   const [boardName, setBoardName] = useState<string>("");
   const [editingName, setEditingName] = useState(false);
@@ -106,8 +106,9 @@ export default function BoardPageView() {
       }
       const { data: board } = await supabase.from("boards").select("name").eq("id", boardId).single();
       if (mounted) {
-        setBoardName(board?.name ?? "Board");
-        setLocalName(board?.name ?? "Board");
+        const bname = (board as any)?.name ?? "Board";
+        setBoardName(bname);
+        setLocalName(bname);
         setLoading(false);
       }
     })();
@@ -320,14 +321,18 @@ export default function BoardPageView() {
                         fetch(`/api/automations?board_id=${boardId}`).then((r) => r.json()),
                         supabase.from("user_profiles").select("id, display_name").order("display_name", { ascending: true }),
                       ]);
-                      setAutoLists(ls.data ?? []);
-                      setAutoLabels(labs.data ?? []);
-                      setAutomations(autos.data ?? []);
-                      setAutoToList(ls.data?.[0]?.id ?? "");
-                      setAutoLabel(labs.data?.[0]?.id ?? "");
-                      setAutoMembers((members.data ?? []).map((m: any) => ({ id: m.id, name: m.display_name ?? null })));
+                      const lsData: any[] = (ls as any).data ?? [];
+                      const labsData: any[] = (labs as any).data ?? [];
+                      const autosData: any[] = (autos as any).data ?? [];
+                      const membersData: any[] = (members as any).data ?? [];
+                      setAutoLists(lsData);
+                      setAutoLabels(labsData);
+                      setAutomations(autosData);
+                      setAutoToList(lsData?.[0]?.id ?? "");
+                      setAutoLabel(labsData?.[0]?.id ?? "");
+                      setAutoMembers(membersData.map((m: any) => ({ id: m.id, name: m.display_name ?? null })));
                       setAutoActions((prev) =>
-                        prev.length ? prev : [{ type: "add_label", label_id: labs.data?.[0]?.id } as any]
+                        prev.length ? prev : [{ type: "add_label", label_id: labsData?.[0]?.id } as any]
                       );
                     } finally {
                       setAutoLoading(false);
@@ -412,7 +417,7 @@ export default function BoardPageView() {
                       .filter((c) => (archivedListId ? c.list_id === archivedListId : true))
                       .map((c) => c.id);
                     if (!ids.length) return;
-                    await getSupabaseBrowserClient().from("cards").update({ archived_at: null }).in("id", ids);
+                    await (getSupabaseBrowserClient() as any).from("cards").update({ archived_at: null } as any).in("id", ids);
                     setArchived((prev) => prev.filter((c) => !ids.includes(c.id)));
                     // emitir evento de restauração para o primeiro cartão (evitar flood)
                     try {
@@ -508,7 +513,7 @@ export default function BoardPageView() {
                           className="text-sm px-3 py-1 rounded border hover:bg-neutral-50"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            await getSupabaseBrowserClient().from("cards").update({ archived_at: null }).eq("id", c.id);
+                            await (getSupabaseBrowserClient() as any).from("cards").update({ archived_at: null } as any).eq("id", c.id);
                             setArchived((prev) => prev.filter((x) => x.id !== c.id));
                             try {
                               await fetch("/api/automations/emit", {

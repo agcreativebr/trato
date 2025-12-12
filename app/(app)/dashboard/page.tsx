@@ -12,7 +12,7 @@ type Workspace = { id: string; name: string; created_at: string };
 type Board = { id: string; name: string; workspace_id: string; created_at: string };
 
 export default function DashboardPage() {
-	const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+	const supabase = useMemo(() => getSupabaseBrowserClient() as any, []);
 	const router = useRouter();
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [boardsByWorkspace, setBoardsByWorkspace] = useState<Record<string, Board[]>>({});
@@ -34,9 +34,10 @@ export default function DashboardPage() {
 				setErrorMsg(error.message);
 			}
 			if (!mounted) return;
-			setWorkspaces(wspaces ?? []);
+			const safeWspaces: Workspace[] = Array.isArray(wspaces) ? (wspaces as any) : [];
+			setWorkspaces(safeWspaces);
 			const map: Record<string, Board[]> = {};
-			for (const ws of wspaces ?? []) {
+			for (const ws of safeWspaces) {
 				const { data: boards } = await supabase.from('boards').select('*').eq('workspace_id', ws.id).order('created_at', { ascending: false });
 				map[ws.id] = boards ?? [];
 			}
@@ -54,7 +55,7 @@ export default function DashboardPage() {
 		setCreating(true);
 		setErrorMsg(null);
 		try {
-			const { error } = await supabase.from('workspaces').insert({ name: newWorkspaceName });
+			const { error } = await supabase.from('workspaces').insert({ name: newWorkspaceName } as any);
 			if (error) {
 				setErrorMsg(error.message);
 				return;
@@ -71,7 +72,7 @@ export default function DashboardPage() {
 	async function createBoard(workspaceId: string) {
 		const name = prompt('Nome do board:')?.trim();
 		if (!name) return;
-		const { error } = await supabase.from('boards').insert({ name, workspace_id: workspaceId });
+		const { error } = await supabase.from('boards').insert({ name, workspace_id: workspaceId } as any);
 		if (error) {
 			setErrorMsg(error.message);
 			return;

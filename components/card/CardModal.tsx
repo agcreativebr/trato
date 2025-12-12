@@ -55,7 +55,7 @@ export function CardModal({
   open: boolean;
   onClose: () => void;
 }) {
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => getSupabaseBrowserClient() as any, []);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState<string>("");
@@ -168,7 +168,8 @@ export function CardModal({
           .select("*")
           .in("checklist_id", ids)
           .order("position", { ascending: true });
-        for (const it of itsAll ?? []) {
+        const itsArr: any[] = (itsAll as any) ?? [];
+        for (const it of itsArr) {
           itemsMap[it.checklist_id] = itemsMap[it.checklist_id] ?? [];
           itemsMap[it.checklist_id].push(it as any);
         }
@@ -263,14 +264,14 @@ export function CardModal({
     const color = prompt("Cor (hex):", "#60a5fa")?.trim() || "#60a5fa";
     const { data } = await supabase
       .from("labels")
-      .insert({ name, color, board_id: boardId })
+      .insert({ name, color, board_id: boardId } as any)
       .select("*")
       .single();
     if (data) setLabels((prev) => [...prev, data as any]);
   }
 
   async function saveDescription() {
-    await supabase.from("cards").update({ description }).eq("id", cardId);
+    await supabase.from("cards").update({ description } as any).eq("id", cardId);
   }
 
   async function saveDueDate(value: string) {
@@ -297,7 +298,7 @@ export function CardModal({
     if (!title) return;
     const { data } = await supabase
       .from("checklists")
-      .insert({ title, card_id: cardId })
+      .insert({ title, card_id: cardId } as any)
       .select("*")
       .single();
     if (data) {
@@ -315,7 +316,7 @@ export function CardModal({
       : 100;
     const { data } = await supabase
       .from("checklist_items")
-      .insert({ title, checklist_id: checklistId, position })
+      .insert({ title, checklist_id: checklistId, position } as any)
       .select("*")
       .single();
     if (data)
@@ -349,7 +350,7 @@ export function CardModal({
     if (!error) {
       const { data } = await supabase
         .from("attachments")
-        .insert({ card_id: cardId, filename: file.name, path })
+        .insert({ card_id: cardId, filename: file.name, path } as any)
         .select("*")
         .single();
       if (data) {
@@ -365,7 +366,7 @@ export function CardModal({
     }
   }
   async function setCover(path: string) {
-    await supabase.from("cards").update({ cover_path: path }).eq("id", cardId);
+    await supabase.from("cards").update({ cover_path: path } as any).eq("id", cardId);
     const { data } = await supabase.storage
       .from("attachments")
       .createSignedUrl(path, 60 * 10);
@@ -379,7 +380,7 @@ export function CardModal({
     } catch {}
   }
   async function clearCover() {
-    await supabase.from("cards").update({ cover_path: null }).eq("id", cardId);
+    await supabase.from("cards").update({ cover_path: null } as any).eq("id", cardId);
     setCoverUrl(null);
     try {
       await fetch("/api/automations/emit", {
@@ -402,7 +403,7 @@ export function CardModal({
       existing && existing.length ? (existing[0] as any).position + 100 : 100;
     await supabase
       .from("cards")
-      .update({ list_id: moveListId, position: newPos })
+      .update({ list_id: moveListId, position: newPos } as any)
       .eq("id", cardId);
     onClose();
   }
@@ -431,14 +432,14 @@ export function CardModal({
       due_date: card.due_date,
       cover_path: card.cover_path,
       cover_size: card.cover_size,
-    });
+    } as any);
     onClose();
   }
 
   async function archiveCard() {
     if (!confirm("Arquivar este cartão?")) return;
     const now = new Date().toISOString();
-    await supabase.from("cards").update({ archived_at: now }).eq("id", cardId);
+    await supabase.from("cards").update({ archived_at: now } as any).eq("id", cardId);
     onClose();
     try {
       await fetch("/api/automations/emit", {
@@ -521,7 +522,7 @@ export function CardModal({
                     onBlur={async () => {
                       await supabase
                         .from("cards")
-                        .update({ title })
+                        .update({ title } as any)
                         .eq("id", cardId);
                     }}
                     className="w-full text-xl font-semibold bg-transparent outline-none"
@@ -639,7 +640,7 @@ export function CardModal({
                               setCoverSize("small");
                               await supabase
                                 .from("cards")
-                                .update({ cover_size: "small" })
+                                .update({ cover_size: "small" } as any)
                                 .eq("id", cardId);
                             }}
                           >
@@ -655,7 +656,7 @@ export function CardModal({
                               setCoverSize("large");
                               await supabase
                                 .from("cards")
-                                .update({ cover_size: "large" })
+                                .update({ cover_size: "large" } as any)
                                 .eq("id", cardId);
                             }}
                           >
@@ -862,7 +863,7 @@ export function CardModal({
                           recurrence: v.recurrence,
                           reminder_minutes:
                             v.reminder === "" ? null : v.reminder,
-                        })
+                        } as any)
                         .eq("id", cardId);
                       setStartDate(startIso);
                       setDueDate(dueIso);
@@ -910,7 +911,7 @@ export function CardModal({
                     onCreate={async (name, color) => {
                       const { data } = await supabase
                         .from("labels")
-                        .insert({ name, color, board_id: boardId })
+                        .insert({ name, color, board_id: boardId } as any)
                         .select("*")
                         .single();
                       if (data) setLabels((prev) => [...prev, data as any]);
