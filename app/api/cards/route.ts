@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { dispatchAutomationForEvent } from "@/lib/automation/engine";
+import { cookies } from "next/headers";
 
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseServerClient();
@@ -12,6 +13,15 @@ export async function POST(req: NextRequest) {
       { error: "title, board_id, list_id e position são obrigatórios" },
       { status: 422 }
     );
+  // identifica ator
+  let actor_id: string | null = null;
+  try {
+    const token = cookies().get("sb-access-token")?.value;
+    if (token) {
+      const { data: authUser } = await supabase.auth.getUser(token);
+      actor_id = authUser?.user?.id ?? null;
+    }
+  } catch {}
   const insert = {
     title,
     board_id,
@@ -31,6 +41,7 @@ export async function POST(req: NextRequest) {
   await supabase.from("card_history").insert({
     card_id: data.id,
     action: "created",
+    actor_id,
     payload: insert,
   });
   // automations: card.created
@@ -51,6 +62,15 @@ export async function PATCH(req: NextRequest) {
   const { id, ...rest } = body ?? {};
   if (!id)
     return NextResponse.json({ error: "id é obrigatório" }, { status: 422 });
+  // identifica ator
+  let actor_id: string | null = null;
+  try {
+    const token = cookies().get("sb-access-token")?.value;
+    if (token) {
+      const { data: authUser } = await supabase.auth.getUser(token);
+      actor_id = authUser?.user?.id ?? null;
+    }
+  } catch {}
   const { data, error } = await supabase
     .from("cards")
     .update(rest)
@@ -62,6 +82,7 @@ export async function PATCH(req: NextRequest) {
   await supabase.from("card_history").insert({
     card_id: data.id,
     action: "updated",
+    actor_id,
     payload: rest,
   });
   return NextResponse.json({ data });

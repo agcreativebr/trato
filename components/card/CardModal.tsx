@@ -80,6 +80,10 @@ export function CardModal({
   const [comments, setComments] = useState<
     { id: string; content: string; created_at: string }[]
   >([]);
+  const [activity, setActivity] = useState<
+    { id: string; action: string; created_at: string; actor_id: string | null; payload: any }[]
+  >([]);
+  const [activityProfiles, setActivityProfiles] = useState<Record<string, { display_name: string | null }>>({});
   const mentionAnchorRef = useRef<HTMLDivElement | null>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -187,6 +191,27 @@ export function CardModal({
       setItemsByChecklist(itemsMap);
       setAttachments(attsRes.data ?? []);
       setComments(cmsRes.data ?? []);
+      // atividade do cartão
+      try {
+        const { data: hist } = await supabase
+          .from("card_history")
+          .select("id, action, created_at, actor_id, payload")
+          .eq("card_id", cardId)
+          .order("created_at", { ascending: false });
+        const rows: any[] = (hist as any) ?? [];
+        setActivity(rows as any);
+        const actorIds = Array.from(new Set(rows.map((r) => r.actor_id).filter(Boolean)));
+        if (actorIds.length) {
+          const { data: profs } = await supabase
+            .from("user_profiles")
+            .select("id, display_name")
+            .in("id", actorIds as string[]);
+          const map = Object.fromEntries((profs ?? []).map((p: any) => [p.id, { display_name: p.display_name ?? null }]));
+          setActivityProfiles(map);
+        } else {
+          setActivityProfiles({});
+        }
+      } catch {}
     })();
     return () => {
       mounted = false;
@@ -844,6 +869,28 @@ export function CardModal({
                       </p>
                     )}
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Atividade</label>
+                    {activity.length === 0 ? (
+                      <p className="text-sm text-neutral-500">Sem atividades.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {activity.map((a) => (
+                          <div key={a.id} className="text-xs border rounded px-2 py-1 flex items-center justify-between">
+                            <div className="min-w-0">
+                              <span className="font-medium">
+                                {activityProfiles[a.actor_id ?? ""]?.display_name ?? "Alguém"}
+                              </span>{" "}
+                              <span className="text-neutral-700">{summarizeActivity(a)}</span>
+                            </div>
+                            <span className="text-neutral-500 shrink-0">
+                              {new Date(a.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1081,6 +1128,25 @@ function wrapSelection(
   const sfx = suffix ?? prefix;
   const next = `${prefix}${value}${sfx}`;
   setter(next);
+}
+
+function summarizeActivity(a: { action: string; payload: any }) {
+  const act = a.action || "";
+  const p = a.payload || {};
+  if (act === "created") return "criou o cartão";
+  if (act === "updated") return "atualizou o cartão";
+  if (act === "moved") return "moveu o cartão de lista";
+  if (act === "dates_updated") return "atualizou as datas";
+  if (act === "label.added") return "adicionou uma etiqueta";
+  if (act === "label.removed") return "removeu uma etiqueta";
+  if (act === "checklist.completed") return "concluiu um checklist";
+  if (act === "checklist.item_toggled") return "marcou/desmarcou um item";
+  if (act === "cover.changed") return "alterou a capa";
+  if (act === "attachment.added") return "adicionou um anexo";
+  if (act === "card.archived") return "arquivou o cartão";
+  if (act === "card.restored") return "restaurou o cartão";
+  if (act === "card.deleted") return "excluiu o cartão";
+  return act;
 }
 
 function LabelsEditor({

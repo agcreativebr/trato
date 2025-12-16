@@ -11,6 +11,15 @@ export async function POST(req: NextRequest) {
   if (!card_id) {
     return NextResponse.json({ error: "card_id é obrigatório" }, { status: 422 });
   }
+  // identifica ator uma vez para reaproveitar
+  let actor_id: string | null = null;
+  try {
+    const token = cookies().get("sb-access-token")?.value;
+    if (token) {
+      const { data: authUser } = await supabase.auth.getUser(token);
+      actor_id = authUser?.user?.id ?? null;
+    }
+  } catch {}
   const updates: any = {};
   if (typeof start_date !== "undefined") updates.start_date = start_date;
   if (typeof due_date !== "undefined") updates.due_date = due_date;
@@ -24,18 +33,18 @@ export async function POST(req: NextRequest) {
     .single();
   const { error } = await supabase.from("cards").update(updates).eq("id", card_id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  // registra histórico de alterações de datas
+  try {
+    await supabase.from("card_history").insert({
+      card_id,
+      action: "dates_updated",
+      actor_id,
+      payload: { start_date, due_date }
+    });
+  } catch {}
   let triggered = 0;
   let candidates = 0;
   try {
-    // tenta identificar usuário (para usar como autor de comentários nas ações)
-    let actor_id: string | null = null;
-    try {
-      const token = cookies().get("sb-access-token")?.value;
-      if (token) {
-        const { data: authUser } = await supabase.auth.getUser(token);
-        actor_id = authUser?.user?.id ?? null;
-      }
-    } catch {}
     if ("due_date" in updates) {
       const t = await dispatchAutomationForEvent({
         type: "due.changed",

@@ -1,9 +1,5 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
   "/page": "app/page.js",
-  "/(app)/workspaces/[workspaceId]/boards/[boardId]/page": "app/(app)/workspaces/[workspaceId]/boards/[boardId]/page.js",
   "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
-  "/api/automations/route": "app/api/automations/route.js",
-  "/api/cards/move/route": "app/api/cards/move/route.js",
-  "/api/workspaces/members/route": "app/api/workspaces/members/route.js"
+  "/(app)/workspaces/[workspaceId]/boards/[boardId]/page": "app/(app)/workspaces/[workspaceId]/boards/[boardId]/page.js"
 }

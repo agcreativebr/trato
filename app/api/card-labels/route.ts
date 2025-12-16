@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { dispatchAutomationForEvent } from "@/lib/automation/engine";
+import { cookies } from "next/headers";
 
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseServerClient();
@@ -17,8 +18,25 @@ export async function POST(req: NextRequest) {
     .select("id, board_id")
     .eq("id", card_id)
     .single();
+  // identifica ator
+  let actor_id: string | null = null;
+  try {
+    const token = cookies().get("sb-access-token")?.value;
+    if (token) {
+      const { data: authUser } = await supabase.auth.getUser(token);
+      actor_id = authUser?.user?.id ?? null;
+    }
+  } catch {}
   if (op === "add") {
     await supabase.from("card_labels").insert({ card_id, label_id });
+    try {
+      await supabase.from("card_history").insert({
+        card_id,
+        action: "label.added",
+        actor_id,
+        payload: { label_id }
+      });
+    } catch {}
     try {
       await dispatchAutomationForEvent({
         type: "label.added",
@@ -28,6 +46,14 @@ export async function POST(req: NextRequest) {
     } catch {}
   } else if (op === "remove") {
     await supabase.from("card_labels").delete().match({ card_id, label_id });
+    try {
+      await supabase.from("card_history").insert({
+        card_id,
+        action: "label.removed",
+        actor_id,
+        payload: { label_id }
+      });
+    } catch {}
     try {
       await dispatchAutomationForEvent({
         type: "label.removed",

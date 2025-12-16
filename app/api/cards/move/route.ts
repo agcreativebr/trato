@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { dispatchAutomationForEvent } from "@/lib/automation/engine";
+import { cookies } from "next/headers";
 
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseServerClient();
@@ -25,9 +26,19 @@ export async function POST(req: NextRequest) {
     .single();
   if (error)
     return NextResponse.json({ error: error.message }, { status: 400 });
+  // identifica ator
+  let actor_id: string | null = null;
+  try {
+    const token = cookies().get("sb-access-token")?.value;
+    if (token) {
+      const { data: authUser } = await supabase.auth.getUser(token);
+      actor_id = authUser?.user?.id ?? null;
+    }
+  } catch {}
   await supabase.from("card_history").insert({
     card_id: data.id,
     action: "moved",
+    actor_id,
     payload: { list_id, position },
   });
   // dispara automações do tipo 'event' para card.moved

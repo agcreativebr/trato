@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { dispatchAutomationForEvent } from "@/lib/automation/engine";
+import { cookies } from "next/headers";
 
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseServerClient();
@@ -35,12 +36,48 @@ export async function POST(req: NextRequest) {
       .select("board_id")
       .eq("id", cl?.card_id)
       .single();
+    // registra histórico do toggle e possível conclusão
+    try {
+      // identifica ator
+      let actor_id: string | null = null;
+      try {
+        const token = cookies().get("sb-access-token")?.value;
+        if (token) {
+          const { data: authUser } = await supabase.auth.getUser(token);
+          actor_id = authUser?.user?.id ?? null;
+        }
+      } catch {}
+      await supabase.from("card_history").insert({
+        card_id: cl?.card_id,
+        action: "checklist.completed",
+        actor_id,
+        payload: { checklist_id: item.checklist_id }
+      });
+    } catch {}
     try {
       await dispatchAutomationForEvent({
         type: "checklist.completed",
         board_id: card?.board_id,
         card_id: cl?.card_id,
       } as any);
+    } catch {}
+  } else {
+    // registro simples de toggle
+    try {
+      let actor_id: string | null = null;
+      try {
+        const token = cookies().get("sb-access-token")?.value;
+        if (token) {
+          const { data: authUser } = await supabase.auth.getUser(token);
+          actor_id = authUser?.user?.id ?? null;
+        }
+      } catch {}
+      await supabase.from("card_history").insert({
+        card_id: item.card_id,
+        action: "checklist.item_toggled",
+        actor_id,
+        payload: { item_id: item.id, done: updated }
+      });
     } catch {}
   }
   return NextResponse.json({ ok: true, done: updated, checklistCompleted: completed });
