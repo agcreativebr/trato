@@ -106,6 +106,9 @@ export function CardModal({
   const movePanelRef = useRef<HTMLDivElement | null>(null);
   const attachmentsPanelRef = useRef<HTMLDivElement | null>(null);
   const [following, setFollowing] = useState(false);
+  const [membersPanelOpen, setMembersPanelOpen] = useState(false);
+  const [workspaceMembers, setWorkspaceMembers] = useState<{ id: string; display_name: string | null }[]>([]);
+  const [cardMemberIds, setCardMemberIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -160,7 +163,7 @@ export function CardModal({
       }
       setLoading(false);
       // Fase 2 (assíncrona): pesado
-      const [clsRes, attsRes, cmsRes] = await Promise.all([
+      const [clsRes, attsRes, cmsRes, wsRes, cmRes] = await Promise.all([
         supabase.from("checklists").select("*").eq("card_id", cardId),
         supabase
           .from("attachments")
@@ -172,6 +175,13 @@ export function CardModal({
           .select("id, content, created_at, author_id")
           .eq("card_id", cardId)
           .order("created_at", { ascending: false }),
+        // membros do workspace do board
+        supabase
+          .from("boards")
+          .select("workspace_id")
+          .eq("id", boardId)
+          .single(),
+        supabase.from("card_members").select("user_id").eq("card_id", cardId),
       ]);
       const cls = clsRes.data ?? [];
       const itemsMap: Record<string, ChecklistItem[]> = {};
@@ -192,6 +202,32 @@ export function CardModal({
       setItemsByChecklist(itemsMap);
       setAttachments(attsRes.data ?? []);
       setComments(cmsRes.data ?? []);
+      setCardMemberIds(((cmRes.data ?? []) as any[]).map((x) => x.user_id));
+      // workspace members
+      try {
+        const wsId = (wsRes.data as any)?.workspace_id as string | undefined;
+        if (wsId) {
+          const { data: wm } = await supabase
+            .from("workspace_members")
+            .select("user_id")
+            .eq("workspace_id", wsId);
+          const ids = Array.from(new Set((wm ?? []).map((x: any) => x.user_id)));
+          if (ids.length) {
+            const { data: profs } = await supabase
+              .from("user_profiles")
+              .select("id, display_name")
+              .in("id", ids);
+            setWorkspaceMembers(
+              (profs ?? []).map((p: any) => ({
+                id: p.id,
+                display_name: p.display_name ?? null,
+              }))
+            );
+          } else {
+            setWorkspaceMembers([]);
+          }
+        }
+      } catch {}
       // autores de comentários
       try {
         const ids = Array.from(new Set(((cmsRes.data ?? []) as any[]).map((c) => c.author_id).filter(Boolean)));
@@ -930,11 +966,7 @@ export function CardModal({
                       variant="secondary"
                       size="sm"
                       leftIcon={<Users size={14} />}
-                      onClick={() =>
-                        alert(
-                          "Membros: em breve (placeholder sem quebrar fluxo)."
-                        )
-                      }
+                      onClick={() => setMembersPanelOpen((v) => !v)}
                     >
                       Membros
                     </Button>
@@ -1026,6 +1058,64 @@ export function CardModal({
                     </Button>
                   </div>
                 </div>
+                {membersPanelOpen && (
+                  <div className="border rounded-md p-3">
+                    <div className="text-sm font-medium mb-2">Membros do cartão</div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          const me = (await supabase.auth.getUser()).data.user?.id;
+                          if (!me) return;
+                          if (cardMemberIds.includes(me)) return;
+                          await fetch("/api/card-members", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ card_id: cardId, user_id: me }),
+                          });
+                          setCardMemberIds((prev) => [...prev, me]);
+                        }}
+                      >
+                        Atribuir-me
+                      </Button>
+                    </div>
+                    <div className="max-h-64 overflow-auto space-y-1">
+                      {workspaceMembers.length === 0 ? (
+                        <div className="text-sm text-neutral-500">Nenhum membro no workspace.</div>
+                      ) : (
+                        workspaceMembers.map((m) => {
+                          const checked = cardMemberIds.includes(m.id);
+                          return (
+                            <label key={m.id} className="flex items-center justify-between px-2 py-1 rounded hover:bg-neutral-50 text-sm">
+                              <span className="truncate">{m.display_name ?? m.id}</span>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={async (e) => {
+                                  if (e.target.checked) {
+                                    await fetch("/api/card-members", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ card_id: cardId, user_id: m.id }),
+                                    });
+                                    setCardMemberIds((prev) => (prev.includes(m.id) ? prev : [...prev, m.id]));
+                                  } else {
+                                    await fetch("/api/card-members", {
+                                      method: "DELETE",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ card_id: cardId, user_id: m.id }),
+                                    });
+                                    setCardMemberIds((prev) => prev.filter((x) => x !== m.id));
+                                  }
+                                }}
+                              />
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div
                   id="dates-panel"

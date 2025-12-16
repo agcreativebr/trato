@@ -431,11 +431,48 @@ export function KanbanBoard({
         }
       )
       .subscribe();
+    // card_members realtime
+    const channel5 = supabase
+      .channel(`members:${boardId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "card_members" },
+        async (payload: any) => {
+          const cardId = (payload.new?.card_id ?? payload.old?.card_id) as string;
+          // garante que o card pertence a este board
+          const exists = Object.values(cardsByList).some((arr) => (arr ?? []).some((c) => c.id === cardId));
+          if (!exists) return;
+          if (payload.eventType === "INSERT") {
+            try {
+              const userId = payload.new.user_id as string;
+              const { data: prof } = await supabase.from("user_profiles").select("id, display_name, avatar_url").eq("id", userId).maybeSingle();
+              setMembersByCard((prev) => {
+                const copy = { ...prev };
+                const arr = copy[cardId] ?? [];
+                copy[cardId] = [
+                  ...arr,
+                  { id: userId, name: prof?.display_name ?? null, avatar_url: prof?.avatar_url ?? null },
+                ];
+                return copy;
+              });
+            } catch {}
+          } else if (payload.eventType === "DELETE") {
+            const userId = payload.old.user_id as string;
+            setMembersByCard((prev) => {
+              const copy = { ...prev };
+              copy[cardId] = (copy[cardId] ?? []).filter((m) => (m as any).id !== userId);
+              return copy;
+            });
+          }
+        }
+      )
+      .subscribe();
     return () => {
       supabase.removeChannel(channel);
       supabase.removeChannel(channel2);
       supabase.removeChannel(channel3);
       supabase.removeChannel(channel4);
+      supabase.removeChannel(channel5);
     };
   }, [boardId, supabase, cardsByList, labelsIndex]);
 
