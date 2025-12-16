@@ -1258,10 +1258,14 @@ function summarizeActivity(a: { action: string; payload: any }) {
   const p = a.payload || {};
   if (act === "created") return "criou o cartão";
   if (act === "updated") return "atualizou o cartão";
-  if (act === "moved") return "moveu o cartão de lista";
+  if (act === "moved") {
+    const from = p.from_list_name || p.from_list_id || "lista anterior";
+    const to = p.to_list_name || p.list_id || p.to_list_id || "lista";
+    return `moveu o cartão de “${from}” para “${to}”`;
+  }
   if (act === "dates_updated") return "atualizou as datas";
-  if (act === "label.added") return "adicionou uma etiqueta";
-  if (act === "label.removed") return "removeu uma etiqueta";
+  if (act === "label.added") return `adicionou a etiqueta${p?.label_name ? ` “${p.label_name}”` : ""}`;
+  if (act === "label.removed") return `removeu a etiqueta${p?.label_name ? ` “${p.label_name}”` : ""}`;
   if (act === "checklist.completed") return "concluiu um checklist";
   if (act === "checklist.item_toggled") return "marcou/desmarcou um item";
   if (act === "cover.changed") return "alterou a capa";

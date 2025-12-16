@@ -18,6 +18,21 @@ export async function POST(req: NextRequest) {
     .select("id, list_id, board_id")
     .eq("id", id)
     .single();
+  // fetch list names for audit (from/to)
+  let fromListName: string | null = null;
+  let toListName: string | null = null;
+  try {
+    const ids = [ (before as any)?.list_id, list_id ].filter(Boolean);
+    if (ids.length) {
+      const { data: lists } = await supabase
+        .from("lists")
+        .select("id,name")
+        .in("id", ids as string[]);
+      const map = new Map((lists ?? []).map((l: any) => [l.id, l.name as string]));
+      if ((before as any)?.list_id) fromListName = map.get((before as any).list_id) ?? null;
+      toListName = map.get(list_id) ?? null;
+    }
+  } catch {}
   const { data, error } = await supabase
     .from("cards")
     .update({ list_id, position })
@@ -41,7 +56,13 @@ export async function POST(req: NextRequest) {
     card_id: data.id,
     action: "moved",
     actor_id,
-    payload: { list_id, position },
+    payload: {
+      from_list_id: (before as any)?.list_id ?? null,
+      from_list_name: fromListName,
+      to_list_id: list_id,
+      to_list_name: toListName,
+      position,
+    },
   });
   // dispara automações do tipo 'event' para card.moved
   try {

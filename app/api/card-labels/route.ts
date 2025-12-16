@@ -31,12 +31,18 @@ export async function POST(req: NextRequest) {
   } catch {}
   if (op === "add") {
     await supabase.from("card_labels").insert({ card_id, label_id });
+    // label friendly name
+    let labelName: string | null = null;
+    try {
+      const { data: lab } = await supabase.from("labels").select("name").eq("id", label_id).maybeSingle();
+      labelName = (lab as any)?.name ?? null;
+    } catch {}
     try {
       await supabase.from("card_history").insert({
         card_id,
         action: "label.added",
         actor_id,
-        payload: { label_id }
+        payload: { label_id, label_name: labelName }
       });
     } catch {}
     try {
@@ -48,12 +54,17 @@ export async function POST(req: NextRequest) {
     } catch {}
   } else if (op === "remove") {
     await supabase.from("card_labels").delete().match({ card_id, label_id });
+    let labelName: string | null = null;
+    try {
+      const { data: lab } = await supabase.from("labels").select("name").eq("id", label_id).maybeSingle();
+      labelName = (lab as any)?.name ?? null;
+    } catch {}
     try {
       await supabase.from("card_history").insert({
         card_id,
         action: "label.removed",
         actor_id,
-        payload: { label_id }
+        payload: { label_id, label_name: labelName }
       });
     } catch {}
     try {
