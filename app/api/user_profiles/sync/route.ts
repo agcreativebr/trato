@@ -5,7 +5,9 @@ import { cookies } from "next/headers";
 export async function GET(_req: NextRequest) {
 	const supabase = getSupabaseServerClient();
 	try {
-		const token = cookies().get("sb-access-token")?.value;
+		const hdr = _req.headers.get("authorization") ?? _req.headers.get("x-sb-access-token") ?? "";
+		const tokenFromHeader = hdr?.toLowerCase().startsWith("bearer ") ? hdr.slice(7) : hdr || undefined;
+		const token = tokenFromHeader ?? cookies().get("sb-access-token")?.value;
 		if (!token) return NextResponse.json({ error: "Sem token" }, { status: 401 });
 		const { data: auth } = await supabase.auth.getUser(token);
 		const u = auth?.user;

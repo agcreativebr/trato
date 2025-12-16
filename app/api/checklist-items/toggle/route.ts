@@ -40,13 +40,15 @@ export async function POST(req: NextRequest) {
     try {
       // identifica ator
       let actor_id: string | null = null;
-      try {
-        const token = cookies().get("sb-access-token")?.value;
-        if (token) {
-          const { data: authUser } = await supabase.auth.getUser(token);
-          actor_id = authUser?.user?.id ?? null;
-        }
-      } catch {}
+    try {
+      const hdr = req.headers.get("authorization") ?? req.headers.get("x-sb-access-token") ?? "";
+      const tokenHeader = hdr?.toLowerCase().startsWith("bearer ") ? hdr.slice(7) : hdr || undefined;
+      const token = tokenHeader ?? cookies().get("sb-access-token")?.value;
+      if (token) {
+        const { data: authUser } = await supabase.auth.getUser(token);
+        actor_id = authUser?.user?.id ?? null;
+      }
+    } catch {}
       await supabase.from("card_history").insert({
         card_id: cl?.card_id,
         action: "checklist.completed",
@@ -66,11 +68,11 @@ export async function POST(req: NextRequest) {
     try {
       let actor_id: string | null = null;
       try {
-        const token = cookies().get("sb-access-token")?.value;
-        if (token) {
-          const { data: authUser } = await supabase.auth.getUser(token);
-          actor_id = authUser?.user?.id ?? null;
-        }
+        const hdr = req.headers.get("authorization") ?? req.headers.get("x-sb-access-token") ?? "";
+        const tokenHeader = hdr?.toLowerCase().startsWith("bearer ") ? hdr.slice(7) : hdr || undefined;
+        const token = tokenHeader ?? cookies().get("sb-access-token")?.value;
+        const { data: authUser } = token ? await supabase.auth.getUser(token) : { data: null as any };
+        actor_id = authUser?.user?.id ?? null;
       } catch {}
       await supabase.from("card_history").insert({
         card_id: item.card_id,

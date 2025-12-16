@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST="{\"components\\\\KanbanBoard.tsx -> @/lib/auth-fetch\":{\"id\":\"components\\\\KanbanBoard.tsx -> @/lib/auth-fetch\",\"files\":[\"static/chunks/_app-pages-browser_lib_auth-fetch_ts.js\"]},\"components\\\\card\\\\CardModal.tsx -> @/lib/auth-fetch\":{\"id\":\"components\\\\card\\\\CardModal.tsx -> @/lib/auth-fetch\",\"files\":[\"static/chunks/_app-pages-browser_lib_auth-fetch_ts.js\"]}}"

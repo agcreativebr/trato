@@ -21,7 +21,9 @@ export async function POST(req: NextRequest) {
   // identifica ator
   let actor_id: string | null = null;
   try {
-    const token = cookies().get("sb-access-token")?.value;
+    const hdr = req.headers.get("authorization") ?? req.headers.get("x-sb-access-token") ?? "";
+    const tokenHeader = hdr?.toLowerCase().startsWith("bearer ") ? hdr.slice(7) : hdr || undefined;
+    const token = tokenHeader ?? cookies().get("sb-access-token")?.value;
     if (token) {
       const { data: authUser } = await supabase.auth.getUser(token);
       actor_id = authUser?.user?.id ?? null;

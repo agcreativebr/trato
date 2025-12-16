@@ -525,7 +525,8 @@ export function KanbanBoard({
             now.getTime() + settings.due_offset_minutes * 60000
           ).toISOString()
         : null;
-    await fetch("/api/cards", {
+    const { authFetch } = await import("@/lib/auth-fetch");
+    await authFetch("/api/cards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -764,7 +765,8 @@ export function KanbanBoard({
 
     // persistência via API (service role) — evita bloqueios de RLS
     try {
-      const res = await fetch("/api/cards/move", {
+      const { authFetch } = await import("@/lib/auth-fetch");
+      const res = await authFetch("/api/cards/move", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

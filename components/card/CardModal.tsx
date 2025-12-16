@@ -343,7 +343,8 @@ export function CardModal({
 
   async function toggleLabel(labelId: string) {
     const op = cardLabelIds.includes(labelId) ? "remove" : "add";
-    await fetch("/api/card-labels", {
+    const { authFetch } = await import("@/lib/auth-fetch");
+    await authFetch("/api/card-labels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ card_id: cardId, label_id: labelId, op }),
@@ -371,7 +372,8 @@ export function CardModal({
 
   async function saveDueDate(value: string) {
     const iso = value ? new Date(value).toISOString() : null;
-    await fetch("/api/cards/dates", {
+    const { authFetch } = await import("@/lib/auth-fetch");
+    await authFetch("/api/cards/dates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ card_id: cardId, due_date: iso }),
@@ -380,7 +382,8 @@ export function CardModal({
   }
   async function saveStartDate(value: string) {
     const iso = value ? new Date(value).toISOString() : null;
-    await fetch("/api/cards/dates", {
+    const { authFetch } = await import("@/lib/auth-fetch");
+    await authFetch("/api/cards/dates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ card_id: cardId, start_date: iso }),
@@ -422,7 +425,8 @@ export function CardModal({
   }
 
   async function toggleChecklistItem(item: ChecklistItem) {
-    const res = await fetch("/api/checklist-items/toggle", {
+    const { authFetch } = await import("@/lib/auth-fetch");
+    const res = await authFetch("/api/checklist-items/toggle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ item_id: item.id }),
@@ -1068,7 +1072,8 @@ export function CardModal({
                           const me = (await supabase.auth.getUser()).data.user?.id;
                           if (!me) return;
                           if (cardMemberIds.includes(me)) return;
-                          await fetch("/api/card-members", {
+                          const { authFetch } = await import("@/lib/auth-fetch");
+                          await authFetch("/api/card-members", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ card_id: cardId, user_id: me }),
@@ -1093,14 +1098,16 @@ export function CardModal({
                                 checked={checked}
                                 onChange={async (e) => {
                                   if (e.target.checked) {
-                                    await fetch("/api/card-members", {
+                                    const { authFetch } = await import("@/lib/auth-fetch");
+                                    await authFetch("/api/card-members", {
                                       method: "POST",
                                       headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({ card_id: cardId, user_id: m.id }),
                                     });
                                     setCardMemberIds((prev) => (prev.includes(m.id) ? prev : [...prev, m.id]));
                                   } else {
-                                    await fetch("/api/card-members", {
+                                    const { authFetch } = await import("@/lib/auth-fetch");
+                                    await authFetch("/api/card-members", {
                                       method: "DELETE",
                                       headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({ card_id: cardId, user_id: m.id }),
