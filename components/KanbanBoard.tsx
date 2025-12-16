@@ -195,24 +195,18 @@ export function KanbanBoard({
       }
       // Carrega membros do workspace para popular filtro mesmo sem atribuição
       try {
-        const { data: wsms } = await supabase
-          .from("workspace_members")
-          .select("user_id")
-          .eq("workspace_id", workspaceId);
-        const wsUserIds = Array.from(new Set((wsms ?? []).map((x: any) => x.user_id)));
-        if (wsUserIds.length) {
-          const { data: wsProfiles } = await supabase
-            .from("user_profiles")
-            .select("id, display_name")
-            .in("id", wsUserIds);
-          const extras = (wsProfiles ?? []).map((p: any) => ({ id: p.id, name: p.display_name ?? null }));
-          // mescla nos membersByCard virtuais para aparecer no filtro
-          setMembersByCard((prev) => {
-            const copy = { ...prev };
-            copy["_workspace_members"] = extras as any;
-            return copy;
-          });
-        }
+        const { authFetch } = await import("@/lib/auth-fetch");
+        const res = await authFetch(`/api/workspaces/members?workspaceId=${workspaceId}`);
+        const json = await res.json();
+        const extras = (json?.data ?? []).map((m: any) => ({
+          id: m.user_id,
+          name: m.profile?.display_name ?? null,
+        }));
+        setMembersByCard((prev) => {
+          const copy = { ...prev };
+          copy["_workspace_members"] = extras as any;
+          return copy;
+        });
       } catch {}
       // fetch labels for all cards
       const { data: allLabels } = await supabase

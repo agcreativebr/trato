@@ -1,4 +1,10 @@
 {
+  "app\\layout.tsx -> @/lib/auth-fetch": {
+    "id": "app\\layout.tsx -> @/lib/auth-fetch",
+    "files": [
+      "static/chunks/_app-pages-browser_lib_auth-fetch_ts.js"
+    ]
+  },
   "components\\KanbanBoard.tsx -> @/lib/auth-fetch": {
     "id": "components\\KanbanBoard.tsx -> @/lib/auth-fetch",
     "files": [

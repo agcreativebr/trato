@@ -561,7 +561,6 @@ export function CardModal({
       })
       .select("*")
       .single();
-    if (data) setComments((prev) => [data as any, ...prev]);
     setComment("");
     try {
       await fetch("/api/automations/emit", {

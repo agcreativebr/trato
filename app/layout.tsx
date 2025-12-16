@@ -11,7 +11,12 @@ const inter = Inter({ subsets: ['latin'] });
 export default function RootLayout({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		// sincroniza perfil do usuário (cria/atualiza user_profiles)
-		fetch('/api/user_profiles/sync').catch(() => {});
+		(async () => {
+			try {
+				const { authFetch } = await import('@/lib/auth-fetch');
+				await authFetch('/api/user_profiles/sync');
+			} catch {}
+		})();
 	}, []);
 	return (
 		<html lang="pt-BR">
