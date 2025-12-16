@@ -10,7 +10,7 @@
 - TailwindCSS
 
 ### Execução
-- Dev: `npm run dev` (subindo em 3001 se 3000 estiver ocupada)
+- Dev: `npm run dev` (porta 3002)
 - Variáveis (`.env`):
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -20,7 +20,8 @@
 - Autenticação com link mágico (Supabase)
 - Quadro tipo Kanban com listas/cartões
 - DnD para reordenar/mover listas e cartões
-- Capas, etiquetas, membros, contadores de anexos/comentários (parcial)
+- Filtros de quadro (texto, etiquetas, membros, vencimento)
+- Capas, etiquetas, membros, contadores de anexos/comentários (parciais)
 - Automações (gatilhos básicos de eventos)
 - Arquivados: modal com busca/restauração/remoção
 
@@ -33,8 +34,8 @@
 - Ver `PARIDADE_TRELLO.md` (gap analysis).
 
 ### Próximos passos (Sprint 1)
-1) Filtros do quadro (texto, etiqueta, membro, vencimento)
-2) Modal de cartão completo (rich text/menções/capa)
-3) Checklists avançados (progresso e vencimento por item)
+1) Modal de cartão completo (rich text/menções/capa)
+2) Checklists avançados (progresso e vencimento por item)
+
 
 

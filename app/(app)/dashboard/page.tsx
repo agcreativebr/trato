@@ -84,7 +84,7 @@ export default function DashboardPage() {
 			const res = await fetch(`/api/workspaces/members?workspaceId=${wsId}`);
 			const json = await res.json();
 			setMembers(json.data ?? []);
-	+	} finally {
+		} finally {
 			setMembersLoading(false);
 		}
 	}

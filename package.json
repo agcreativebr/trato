@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node scripts/kill-port.js 3002 && next dev -p 3002",
+    "build": "node scripts/clean.js && next build",
+    "start": "node scripts/kill-port.js 3002 && next start -p 3002",
     "postinstall": "next telemetry disable || true"
   },
   "dependencies": {

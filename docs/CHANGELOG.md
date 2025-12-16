@@ -1,3 +1,4 @@
+- UI de membros no Dashboard: listar membros do workspace, adicionar por e-mail (usuário existente), alterar papel e remover.
 ## Changelog
 
 ### 2025-12-11

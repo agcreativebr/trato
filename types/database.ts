@@ -23,13 +23,44 @@ export type Tables = {
 			list_id: string;
 			title: string;
 			description: string | null;
+			start_date?: string | null;
 			position: number;
 			due_date: string | null;
+			archived_at?: string | null;
+			cover_path?: string | null;
+			cover_size?: 'small' | 'large' | null;
+			recurrence?: 'none' | 'daily' | 'weekly' | 'monthly' | null;
+			reminder_minutes?: number | null;
 			created_at: string;
 			updated_at: string;
 		};
-		Insert: { board_id: string; list_id: string; title: string; position: number; description?: string | null; due_date?: string | null };
-		Update: Partial<{ list_id: string; title: string; description: string | null; position: number; due_date: string | null }>;
+		Insert: {
+			board_id: string;
+			list_id: string;
+			title: string;
+			position: number;
+			description?: string | null;
+			due_date?: string | null;
+			start_date?: string | null;
+			archived_at?: string | null;
+			cover_path?: string | null;
+			cover_size?: 'small' | 'large' | null;
+			recurrence?: 'none' | 'daily' | 'weekly' | 'monthly' | null;
+			reminder_minutes?: number | null;
+		};
+		Update: Partial<{
+			list_id: string;
+			title: string;
+			description: string | null;
+			position: number;
+			due_date: string | null;
+			start_date: string | null;
+			archived_at: string | null;
+			cover_path: string | null;
+			cover_size: 'small' | 'large' | null;
+			recurrence: 'none' | 'daily' | 'weekly' | 'monthly' | null;
+			reminder_minutes: number | null;
+		}>;
 	};
 };
 

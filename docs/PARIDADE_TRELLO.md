@@ -6,7 +6,7 @@
 
 ### Quadros, Listas e Cartões
 - DnD completo e operações básicas de lista/cartão: presente
-- Filtros no quadro (texto/etiquetas/membros/datas): faltante
+- Filtros no quadro (texto/etiquetas/membros/datas): presente
 - Pesquisa/saved filters por board: faltante
 - Atividade (audit) por board/cartão: faltante
 
@@ -33,5 +33,6 @@
 - Integrações (Drive/Dropbox), webhooks: faltante
 - Acessibilidade e i18n: faltante
 - Segurança/RLS forte por workspace/board; rate limiting e auditoria: faltante
+
 
 

@@ -12,3 +12,4 @@ Padronização:
 - Novas funcionalidades devem ter seção em ROADMAP e/ou documento de Sprint ativo.
 
 
+
