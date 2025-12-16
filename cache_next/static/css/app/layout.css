@@ -1244,6 +1244,10 @@ video {
   margin-left: auto;
   margin-right: auto;
 }
+.my-1 {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
 .mb-1 {
   margin-bottom: 0.25rem;
 }

@@ -180,18 +180,40 @@ export function KanbanBoard({
         const pMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
         const byCard: Record<
           string,
-          { name?: string | null; avatar_url?: string | null }[]
+          { id?: string; name?: string | null; avatar_url?: string | null }[]
         > = {};
         for (const c of cm ?? []) {
           byCard[c.card_id] = byCard[c.card_id] ?? [];
           const prof = pMap.get(c.user_id) as any;
           byCard[c.card_id].push({
+            id: c.user_id,
             name: prof?.display_name ?? null,
             avatar_url: prof?.avatar_url ?? null,
           });
         }
         setMembersByCard(byCard);
       }
+      // Carrega membros do workspace para popular filtro mesmo sem atribuição
+      try {
+        const { data: wsms } = await supabase
+          .from("workspace_members")
+          .select("user_id")
+          .eq("workspace_id", workspaceId);
+        const wsUserIds = Array.from(new Set((wsms ?? []).map((x: any) => x.user_id)));
+        if (wsUserIds.length) {
+          const { data: wsProfiles } = await supabase
+            .from("user_profiles")
+            .select("id, display_name")
+            .in("id", wsUserIds);
+          const extras = (wsProfiles ?? []).map((p: any) => ({ id: p.id, name: p.display_name ?? null }));
+          // mescla nos membersByCard virtuais para aparecer no filtro
+          setMembersByCard((prev) => {
+            const copy = { ...prev };
+            copy["_workspace_members"] = extras as any;
+            return copy;
+          });
+        }
+      } catch {}
       // fetch labels for all cards
       const { data: allLabels } = await supabase
         .from("labels")
@@ -499,7 +521,8 @@ export function KanbanBoard({
 
   const allMembers = useMemo(() => {
     const map = new Map<string, { id: string; name: string | null }>();
-    for (const arr of Object.values(membersByCard)) {
+    for (const key of Object.keys(membersByCard)) {
+      const arr = (membersByCard as any)[key] as any[];
       for (const m of arr ?? []) {
         if (!m?.id) continue;
         if (!map.has(m.id)) map.set(m.id, { id: m.id, name: m.name ?? null });

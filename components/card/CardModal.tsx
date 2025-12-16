@@ -78,8 +78,9 @@ export function CardModal({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [comment, setComment] = useState("");
   const [comments, setComments] = useState<
-    { id: string; content: string; created_at: string }[]
+    { id: string; content: string; created_at: string; author_id?: string | null }[]
   >([]);
+  const [commentAuthors, setCommentAuthors] = useState<Record<string, { display_name: string | null }>>({});
   const [activity, setActivity] = useState<
     { id: string; action: string; created_at: string; actor_id: string | null; payload: any }[]
   >([]);
@@ -168,7 +169,7 @@ export function CardModal({
           .order("created_at", { ascending: false }),
         supabase
           .from("card_comments")
-          .select("id, content, created_at")
+          .select("id, content, created_at, author_id")
           .eq("card_id", cardId)
           .order("created_at", { ascending: false }),
       ]);
@@ -191,6 +192,16 @@ export function CardModal({
       setItemsByChecklist(itemsMap);
       setAttachments(attsRes.data ?? []);
       setComments(cmsRes.data ?? []);
+      // autores de comentários
+      try {
+        const ids = Array.from(new Set(((cmsRes.data ?? []) as any[]).map((c) => c.author_id).filter(Boolean)));
+        if (ids.length) {
+          const { data: profs } = await supabase.from("user_profiles").select("id, display_name").in("id", ids as string[]);
+          setCommentAuthors(Object.fromEntries((profs ?? []).map((p: any) => [p.id, { display_name: p.display_name ?? null }])));
+        } else {
+          setCommentAuthors({});
+        }
+      } catch {}
       // atividade do cartão
       try {
         const { data: hist } = await supabase
@@ -237,8 +248,22 @@ export function CardModal({
             id: string;
             content: string;
             created_at: string;
+            author_id?: string | null;
           };
           setComments((prev) => [row, ...prev]);
+          if (row.author_id) {
+            supabase
+              .from("user_profiles")
+              .select("id, display_name")
+              .eq("id", row.author_id)
+              .maybeSingle()
+              .then((r: any) => {
+                if (r?.data?.id) {
+                  setCommentAuthors((prev) => ({ ...prev, [r.data.id]: { display_name: r.data.display_name ?? null } }));
+                }
+              })
+              .catch(() => {});
+          }
         }
       )
       .subscribe();
@@ -854,7 +879,9 @@ export function CardModal({
                     {comments.map((c) => (
                       <div key={c.id} className="text-sm border rounded p-2">
                         <div className="text-neutral-500 text-xs">
-                          {new Date(c.created_at).toLocaleString()}
+                          {commentAuthors[c.author_id ?? ""]?.display_name
+                            ? `${commentAuthors[c.author_id ?? ""]?.display_name} — ${new Date(c.created_at).toLocaleString()}`
+                            : new Date(c.created_at).toLocaleString()}
                         </div>
                         <div className="prose prose-sm max-w-none">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
