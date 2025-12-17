@@ -32,6 +32,17 @@ export async function POST(req: NextRequest) {
         actor_id = authUser?.user?.id ?? null;
       }
     } catch {}
+    // registra no histórico para alguns eventos genéricos
+    try {
+      if (["attachment.added","cover.changed","comment.posted","card.archived","card.restored","card.deleted"].includes(type)) {
+        await supabase.from("card_history").insert({
+          card_id: card.id,
+          action: type,
+          actor_id,
+          payload: payload ?? null
+        });
+      }
+    } catch {}
     const triggered = await dispatchAutomationForEvent({
       type,
       board_id: card.board_id,

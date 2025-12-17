@@ -75,6 +75,8 @@ export async function PATCH(req: NextRequest) {
       actor_id = authUser?.user?.id ?? null;
     }
   } catch {}
+  // estado anterior
+  const { data: before } = await supabase.from("cards").select("*").eq("id", id).single();
   const { data, error } = await supabase
     .from("cards")
     .update(rest)
@@ -87,7 +89,7 @@ export async function PATCH(req: NextRequest) {
     card_id: data.id,
     action: "updated",
     actor_id,
-    payload: rest,
+    payload: { before, after: rest },
   });
   return NextResponse.json({ data });
 }

@@ -689,10 +689,12 @@ export function CardModal({
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     onBlur={async () => {
-                      await supabase
-                        .from("cards")
-                        .update({ title } as any)
-                        .eq("id", cardId);
+                      const { authFetch } = await import("@/lib/auth-fetch");
+                      await authFetch("/api/cards", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: cardId, title }),
+                      });
                     }}
                     className="w-full text-xl font-semibold bg-transparent outline-none"
                   />
@@ -706,7 +708,14 @@ export function CardModal({
                     value={description ?? ""}
                     onChange={setDescription}
                   />
-                  <SaveRow onSave={saveDescription} />
+                  <SaveRow onSave={async () => {
+                    const { authFetch } = await import("@/lib/auth-fetch");
+                    await authFetch("/api/cards", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ id: cardId, description }),
+                    });
+                  }} />
                 </div>
 
                 <div className="space-y-3">

@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   // precisamos do card atual para saber board_id e from_list_id
   const { data: before } = await supabase
     .from("cards")
-    .select("id, list_id, board_id")
+    .select("id, list_id, board_id, position")
     .eq("id", id)
     .single();
   // fetch list names for audit (from/to)
@@ -61,7 +61,8 @@ export async function POST(req: NextRequest) {
       from_list_name: fromListName,
       to_list_id: list_id,
       to_list_name: toListName,
-      position,
+      from_position: (before as any)?.position ?? null,
+      to_position: position,
     },
   });
   // dispara automações do tipo 'event' para card.moved
