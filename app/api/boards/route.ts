@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { cookies } from "next/headers";
 
 export async function GET(req: NextRequest) {
   const supabase = getSupabaseServerClient();
@@ -45,6 +46,7 @@ export async function PATCH(req: NextRequest) {
   const { id, name } = body ?? {};
   if (!id)
     return NextResponse.json({ error: "id é obrigatório" }, { status: 422 });
+  const { data: before } = await supabase.from("boards").select("*").eq("id", id).single();
   const update: Record<string, any> = {};
   if (typeof name === "string") update.name = name;
   if (Object.keys(update).length === 0) {
@@ -58,6 +60,25 @@ export async function PATCH(req: NextRequest) {
     .single();
   if (error)
     return NextResponse.json({ error: error.message }, { status: 400 });
+  // auditoria
+  try {
+    let actor_id: string | null = null;
+    try {
+      const hdr = req.headers.get("authorization") ?? req.headers.get("x-sb-access-token") ?? "";
+      const tokenHeader = hdr?.toLowerCase().startsWith("bearer ") ? hdr.slice(7) : hdr || undefined;
+      const token = tokenHeader ?? cookies().get("sb-access-token")?.value;
+      if (token) {
+        const { data: authUser } = await supabase.auth.getUser(token);
+        actor_id = authUser?.user?.id ?? null;
+      }
+    } catch {}
+    await supabase.from("board_history").insert({
+      board_id: id,
+      actor_id,
+      action: "board.updated",
+      payload: { before, after: update }
+    } as any);
+  } catch {}
   return NextResponse.json({ data });
 }
 
