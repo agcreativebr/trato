@@ -7,6 +7,7 @@ import {
   PointerSensor,
   rectIntersection,
   pointerWithin,
+  closestCenter,
   getFirstCollision,
   type CollisionDetection,
   useSensor,
@@ -72,7 +73,7 @@ export function KanbanBoard({
   const [lists, setLists] = useState<List[]>([]);
   const [cardsByList, setCardsByList] = useState<Record<string, Card[]>>({});
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 3 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 2 } })
   );
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [membersByCard, setMembersByCard] = useState<
@@ -651,19 +652,33 @@ export function KanbanBoard({
       setOverListId(toListId);
     } else {
       setOverListId(null);
-      // placeholder para cartões: calcula target e índice de inserção
+      // placeholder para cartões: usa dados do sortable para melhor precisão
       const activeParts = activeId.split(":");
       if (activeParts.length === 2) {
-        let toListId: string;
-        if (overId.startsWith("list:")) toListId = overId.replace("list:", "");
-        else if (overId.includes(":")) toListId = overId.split(":")[0];
-        else toListId = overId;
-        if (lists.some((l) => l.id === toListId)) {
-          const targetCards = (cardsByList[toListId] ?? []).filter(
-            (c) => c.id !== activeParts[1]
-          );
+        const fromListId = activeParts[0];
+        const activeCardId = activeParts[1];
+        const overSortable = event.over?.data?.current?.sortable;
+        let toListId: string | null = null;
+        let overIndex: number | null = null;
+        if (overSortable?.containerId) {
+          toListId = String(overSortable.containerId);
+          if (typeof overSortable.index === "number") overIndex = overSortable.index;
+        }
+        if (!toListId) {
+          if (overId.startsWith("list:")) toListId = overId.replace("list:", "");
+          else if (overId.includes(":")) toListId = overId.split(":")[0];
+          else toListId = overId;
+        }
+        if (toListId && lists.some((l) => l.id === toListId)) {
+          const allTarget = cardsByList[toListId] ?? [];
+          const targetCards = allTarget.filter((c) => c.id !== activeCardId);
           let insertIndex = targetCards.length;
-          if (!overId.startsWith("list:") && overId.includes(":")) {
+          if (overIndex != null && overIndex >= 0) {
+            // usar o índice do sortable diretamente; como removemos o ativo de targetCards,
+            // o overIndex já representa a posição correta de inserção
+            const idx = overIndex;
+            insertIndex = Math.max(0, Math.min(idx, targetCards.length));
+          } else if (!overId.startsWith("list:") && overId.includes(":")) {
             const overCardId = overId.split(":")[1];
             const idx = targetCards.findIndex((c) => c.id === overCardId);
             if (idx >= 0) insertIndex = idx;
@@ -739,14 +754,16 @@ export function KanbanBoard({
     const activeParts = activeId.split(":");
     const fromListId = activeParts[0];
     const cardId = activeParts[1];
+    // Resolve destino usando dados do sortable quando possível
     let toListId: string;
-    if (overId.startsWith("list:")) {
+    const overSortable = (over as any)?.data?.current?.sortable;
+    if (overSortable?.containerId) {
+      toListId = String(overSortable.containerId);
+    } else if (overId.startsWith("list:")) {
       toListId = overId.replace("list:", "");
     } else if (overId.startsWith("container:")) {
-      // quando o alvo é o container externo da lista (sortable das listas)
       toListId = overId.replace("container:", "");
     } else {
-      // formato <listId>:<cardId>
       toListId = overId.split(":")[0];
     }
     // sanity: garante que é uma lista válida
@@ -755,9 +772,12 @@ export function KanbanBoard({
       (c) => c.id !== cardId
     );
 
-    // índice de inserção: se estiver sobre um card, antes dele; se sobre a lista, no final
+    // índice de inserção usando sortable.index
     let insertIndex = targetListCards.length;
-    if (!overId.startsWith("list:") && !overId.startsWith("container:")) {
+    const overIndex: number | undefined = overSortable?.index;
+    if (typeof overIndex === "number") {
+      insertIndex = Math.max(0, Math.min(overIndex, targetListCards.length));
+    } else if (!overId.startsWith("list:") && !overId.startsWith("container:")) {
       const overCardId = overId.split(":")[1];
       const idx = targetListCards.findIndex((c) => c.id === overCardId);
       if (idx >= 0) insertIndex = idx;
@@ -935,10 +955,11 @@ export function KanbanBoard({
         collisionDetection={((args) => {
           const isListDrag = String(args.active.id).startsWith("container:");
           if (isListDrag) {
-            const collisions = pointerWithin(args);
-            return collisions.length > 0 ? collisions : rectIntersection(args);
+            const col = pointerWithin(args);
+            return col.length ? col : rectIntersection(args);
           }
-          return rectIntersection(args);
+          const col = closestCenter(args);
+          return col.length ? col : rectIntersection(args);
         }) as CollisionDetection}
         onDragStart={onDragStart}
         onDragOver={onDragOver}

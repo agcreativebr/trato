@@ -263,6 +263,7 @@ export function KanbanList({
       )}
       <div className="space-y-2 overflow-y-auto overflow-x-hidden max-h-full pr-1" ref={setNodeRef as React.Ref<HTMLDivElement>}>
         <SortableContext
+          id={list.id}
           items={cards.map((c) => `${list.id}:${c.id}`)}
           strategy={verticalListSortingStrategy}
         >
