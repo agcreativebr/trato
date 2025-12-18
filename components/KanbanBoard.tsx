@@ -6,6 +6,9 @@ import {
   DragStartEvent,
   PointerSensor,
   rectIntersection,
+  pointerWithin,
+  getFirstCollision,
+  type CollisionDetection,
   useSensor,
   useSensors,
   DragOverlay,
@@ -98,6 +101,10 @@ export function KanbanBoard({
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [overListId, setOverListId] = useState<string | null>(null);
   const [draggingListId, setDraggingListId] = useState<string | null>(null);
+  const [cardPlaceholder, setCardPlaceholder] = useState<{
+    listId: string;
+    index: number;
+  } | null>(null);
   const activeOverlay = useMemo(() => {
     if (!activeDragId) return null;
     const [lId, cId] = activeDragId.split(":");
@@ -627,6 +634,8 @@ export function KanbanBoard({
     if (id.startsWith("container:")) {
       setDraggingListId(id.replace("container:", ""));
     }
+    // limpa placeholder de cartões
+    if (!id.startsWith("container:")) setCardPlaceholder(null);
   }
 
   function onDragOver(event: any) {
@@ -642,6 +651,28 @@ export function KanbanBoard({
       setOverListId(toListId);
     } else {
       setOverListId(null);
+      // placeholder para cartões: calcula target e índice de inserção
+      const activeParts = activeId.split(":");
+      if (activeParts.length === 2) {
+        let toListId: string;
+        if (overId.startsWith("list:")) toListId = overId.replace("list:", "");
+        else if (overId.includes(":")) toListId = overId.split(":")[0];
+        else toListId = overId;
+        if (lists.some((l) => l.id === toListId)) {
+          const targetCards = (cardsByList[toListId] ?? []).filter(
+            (c) => c.id !== activeParts[1]
+          );
+          let insertIndex = targetCards.length;
+          if (!overId.startsWith("list:") && overId.includes(":")) {
+            const overCardId = overId.split(":")[1];
+            const idx = targetCards.findIndex((c) => c.id === overCardId);
+            if (idx >= 0) insertIndex = idx;
+          }
+          setCardPlaceholder({ listId: toListId, index: insertIndex });
+        } else {
+          setCardPlaceholder(null);
+        }
+      }
     }
   }
 
@@ -649,6 +680,7 @@ export function KanbanBoard({
     setActiveDragId(null);
     setDraggingListId(null);
     setOverListId(null);
+    setCardPlaceholder(null);
     const { active, over } = event;
     if (!over) return;
     const activeId = String(active.id); // format: <listId>:<cardId>
@@ -900,7 +932,14 @@ export function KanbanBoard({
       <div className="flex gap-4 overflow-x-auto overflow-y-hidden pb-6 h-full">
       <DndContext
         sensors={sensors}
-        collisionDetection={rectIntersection}
+        collisionDetection={((args) => {
+          const isListDrag = String(args.active.id).startsWith("container:");
+          if (isListDrag) {
+            const collisions = pointerWithin(args);
+            return collisions.length > 0 ? collisions : rectIntersection(args);
+          }
+          return rectIntersection(args);
+        }) as CollisionDetection}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
@@ -913,7 +952,7 @@ export function KanbanBoard({
             {lists.map((l) => (
               <>
                 {draggingListId && overListId === l.id && (
-                  <div className="w-80 min-w-[20rem] rounded-xl border-2 border-dashed border-sky-400 bg-sky-100/30 h-12 self-stretch" />
+                  <div className="w-80 min-w-[20rem] rounded-xl border-2 border-dashed border-sky-400 bg-sky-100/40 self-stretch transition-all" />
                 )}
                 <KanbanList
                   key={l.id}
@@ -932,6 +971,7 @@ export function KanbanBoard({
                       commentsCount: commentsCountByCard[c.id] ?? 0,
                     })) as any
                   }
+                  placeholderIndex={cardPlaceholder && cardPlaceholder.listId === l.id ? cardPlaceholder.index : null}
                   onAddCard={(title) => addCard(l.id, title)}
                   allLists={lists}
                   onMoveList={async (dir) => {

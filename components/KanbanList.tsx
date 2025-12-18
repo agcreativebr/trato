@@ -26,6 +26,7 @@ export function KanbanList({
   boardId,
   workspaceId,
   cards,
+  placeholderIndex,
   onAddCard,
   allLists,
   onMoveList,
@@ -40,6 +41,7 @@ export function KanbanList({
   boardId: string;
   workspaceId: string;
   cards: Card[];
+  placeholderIndex?: number | null;
   onAddCard: (title: string) => void;
   allLists: { id: string; name: string }[];
   onMoveList: (dir: "left" | "right") => void;
@@ -259,16 +261,22 @@ export function KanbanList({
           </div>
         </div>
       )}
-      <div className="space-y-2 overflow-y-auto max-h-full pr-1" ref={setNodeRef as React.Ref<HTMLDivElement>}>
+      <div className="space-y-2 overflow-y-auto overflow-x-hidden max-h-full pr-1" ref={setNodeRef as React.Ref<HTMLDivElement>}>
         <SortableContext
           items={cards.map((c) => `${list.id}:${c.id}`)}
           strategy={verticalListSortingStrategy}
         >
-          {cards.map((c) => (
+          {cards.map((c, i) => (
             <div key={c.id} onClick={() => (c as any).onOpen?.()}>
+              {typeof placeholderIndex === "number" && placeholderIndex === i && (
+                <div className="mb-2 h-16 rounded-lg border-2 border-dashed border-sky-400 bg-sky-100/30 transition-all" />
+              )}
               <KanbanCard card={c as any} listId={list.id} />
             </div>
           ))}
+          {typeof placeholderIndex === "number" && placeholderIndex === cards.length && (
+            <div className="mb-2 h-16 rounded-lg border-2 border-dashed border-sky-400 bg-sky-100/30 transition-all" />
+          )}
         </SortableContext>
       </div>
       <Popover
