@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Popover } from "@/components/ui/Popover";
 import { Modal } from "@/components/ui/Modal";
 import { ArrowLeft, Check, X } from "lucide-react";
+import { ActivityPanel } from "@/components/ActivityPanel";
 
 type ActionDraft =
   | { type: "add_label"; label_id?: string }
@@ -43,6 +44,7 @@ export default function BoardPageView() {
   const [archivedOpenCardId, setArchivedOpenCardId] = useState<string | null>(null);
   const [archivedCovers, setArchivedCovers] = useState<Record<string, string | null>>({});
   const [showAutomations, setShowAutomations] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [automations, setAutomations] = useState<any[]>([]);
   const [autoLoading, setAutoLoading] = useState(false);
   const [autoName, setAutoName] = useState("");
@@ -256,6 +258,7 @@ export default function BoardPageView() {
             <Button variant="ghost" leftIcon={<ArrowLeft size={16} />} onClick={() => router.push("/dashboard")}>
               Voltar
             </Button>
+            {/* Botão removido: 'Atividade' agora fica dentro do menu */}
             <button
               ref={menuBtnRef}
               className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-neutral-100"
@@ -273,6 +276,15 @@ export default function BoardPageView() {
             >
               <div className="p-2 space-y-1">
                 <div className="text-sm font-semibold px-2 py-1">Menu do quadro</div>
+                <button
+                  className="w-full text-left px-2 py-1 hover:bg-neutral-50"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setActivityOpen(true);
+                  }}
+                >
+                  Atividade…
+                </button>
                 <button
                   className="w-full text-left px-2 py-1 hover:bg-neutral-50"
                   onClick={async () => {
@@ -370,6 +382,10 @@ export default function BoardPageView() {
           </div>
         </div>
       </div>
+
+      <Modal open={activityOpen} onClose={() => setActivityOpen(false)}>
+        <ActivityPanel boardId={boardId} open={activityOpen} onClose={() => setActivityOpen(false)} />
+      </Modal>
 
       <div className="flex-1 min-h-0">
         <KanbanBoard boardId={boardId} workspaceId={workspaceId} />

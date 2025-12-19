@@ -12,6 +12,16 @@ body {
   @apply bg-neutral-50 text-neutral-900;
 }
 
+:root, html {
+  /* evita 'salto' de layout quando o scrollbar some */
+  scrollbar-gutter: stable both-edges;
+}
+
+/* Mantém a barra de rolagem vertical sempre reservada para evitar 'pulo' da barra superior */
+html {
+  overflow-y: scroll;
+}
+
 :root {
   /* tokens para superfícies/realces */
   --surface: 255 255 255; /* branco */

@@ -11,10 +11,12 @@ export async function GET(req: NextRequest) {
 	const action = searchParams.get("action") || undefined;
 	const actor = searchParams.get("actor_id") || undefined;
 	if (!boardId) return NextResponse.json({ error: "board_id é obrigatório" }, { status: 422 });
-	// busca histórico do board (join via cards)
-	const { data: rows, error } = await supabase
-		.rpc("get_board_history", { b_id: boardId as any })
-		.select?.?.() as any; // tentativa de RPC; fallback abaixo
+	// tenta via RPC (se existir)
+	let rows: any[] | null = null;
+	try {
+		const { data } = await supabase.rpc("get_board_history", { b_id: boardId as any });
+		if (Array.isArray(data)) rows = data as any[];
+	} catch {}
 
 	// Fallback: consulta manual (sem RPC)
 	let dataRows = rows as any[] | null;
@@ -36,33 +38,42 @@ export async function GET(req: NextRequest) {
 			.select("id, action, payload, actor_id, created_at")
 			.eq("board_id", boardId)
 			.order("created_at", { ascending: false });
-		const boardHist = (bh ?? []).map((r: any) => ({
-			timestamp: r.created_at,
-			card_id: null,
-			actor_id: r.actor_id,
-			action: r.action,
-			payload: r.payload,
-		}));
-		const actorIds = Array.from(new Set(hist.map((r) => r.actor_id).filter(Boolean)));
+		const boardHistRaw = (bh ?? []) as any[];
+
+		// perfis de atores (card + board history)
+		const actorIds = Array.from(new Set(
+			[...hist.map((r) => r.actor_id), ...boardHistRaw.map((r) => r.actor_id)].filter(Boolean) as string[]
+		));
 		let profiles: Record<string, string | null> = {};
 		if (actorIds.length) {
 			const { data: profs } = await supabase.from("user_profiles").select("id, display_name").in("id", actorIds);
 			profiles = Object.fromEntries((profs ?? []).map((p: any) => [p.id, p.display_name ?? null]));
 		}
-		dataRows = hist.map((r) => ({
+		const histRows = hist.map((r) => ({
 			timestamp: r.created_at,
 			card_id: r.card_id,
 			actor_id: r.actor_id,
 			actor_name: profiles[r.actor_id ?? ""] ?? null,
 			action: r.action,
 			payload: r.payload,
-		})).concat(boardHist);
+		}));
+		const boardRows = boardHistRaw.map((r) => ({
+			timestamp: r.created_at,
+			card_id: null,
+			actor_id: r.actor_id,
+			actor_name: profiles[r.actor_id ?? ""] ?? null,
+			action: r.action,
+			payload: r.payload,
+		}));
+		dataRows = histRows.concat(boardRows);
 	}
 	// filtros
 	if (start) dataRows = (dataRows ?? []).filter((r) => new Date(r.timestamp).getTime() >= new Date(start).getTime());
 	if (end) dataRows = (dataRows ?? []).filter((r) => new Date(r.timestamp).getTime() <= new Date(end).getTime());
 	if (action) dataRows = (dataRows ?? []).filter((r) => String(r.action) === action);
 	if (actor) dataRows = (dataRows ?? []).filter((r) => String(r.actor_id ?? "") === actor);
+	// ordenação: mais recentes no topo
+	dataRows = (dataRows ?? []).slice().sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 	if (format === "csv") {
 		const headers = ["timestamp", "card_id", "actor_id", "actor_name", "action", "payload"];
 		const escape = (v: any) =>

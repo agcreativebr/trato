@@ -23,7 +23,7 @@ export default function DashboardPage() {
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 	const [membersOpen, setMembersOpen] = useState(false);
 	const [membersLoading, setMembersLoading] = useState(false);
-	const [members, setMembers] = useState<{ user_id: string; role: 'admin'|'editor'|'viewer'; profile?: { display_name?: string|null; avatar_url?: string|null } | null }[]>([]);
+	const [members, setMembers] = useState<{ user_id: string; role: 'admin'|'editor'|'viewer'; email?: string|null; pending?: boolean; profile?: { display_name?: string|null; avatar_url?: string|null } | null }[]>([]);
 	const [targetWorkspaceId, setTargetWorkspaceId] = useState<string | null>(null);
 	const [inviteEmail, setInviteEmail] = useState('');
 	const [inviteRole, setInviteRole] = useState<'admin'|'editor'|'viewer'>('editor');
@@ -232,7 +232,7 @@ export default function DashboardPage() {
 			</section>
 
 			<Modal open={membersOpen} onClose={() => setMembersOpen(false)}>
-				<div className="p-4 w-[720px] max-w-[96vw]">
+				<div className="p-4 w-full max-w-none">
 					<div className="flex items-center justify-between mb-3">
 						<div className="text-lg font-semibold">Membros do workspace</div>
 						<button className="h-8 w-8 inline-flex items-center justify-center rounded hover:bg-neutral-100" onClick={() => setMembersOpen(false)}>×</button>
@@ -241,7 +241,7 @@ export default function DashboardPage() {
 						<div className="flex flex-wrap items-center gap-2">
 							<input
 								className="border rounded px-3 py-2 flex-1 min-w-[220px]"
-								placeholder="E-mail do usuário (já cadastrado)"
+								placeholder="E-mail do usuário"
 								value={inviteEmail}
 								onChange={(e) => setInviteEmail(e.target.value)}
 							/>
@@ -252,13 +252,19 @@ export default function DashboardPage() {
 							</select>
 							<Button isLoading={membersLoading} onClick={addMember}>Adicionar</Button>
 						</div>
-						<div className="border rounded">
+						<div className="border rounded w-full">
 							{membersLoading ? (
 								<div className="p-3 text-sm text-neutral-600">Carregando membros…</div>
 							) : members.length === 0 ? (
 								<div className="p-3 text-sm text-neutral-600">Nenhum membro.</div>
 							) : (
-								<table className="w-full text-sm">
+								<div className="overflow-x-auto">
+								<table className="w-full text-sm table-fixed">
+									<colgroup>
+										<col className="w-[50%]" />
+										<col className="w-[15%]" />
+										<col className="w-[35%]" />
+									</colgroup>
 									<thead>
 										<tr className="text-left border-b">
 											<th className="px-3 py-2">Usuário</th>
@@ -270,7 +276,13 @@ export default function DashboardPage() {
 										{members.map((m) => (
 											<tr key={m.user_id} className="border-b">
 												<td className="px-3 py-2">
-													{m.profile?.display_name ?? m.user_id}
+													<div className="flex items-center gap-2">
+														<div className="min-w-0">
+															<div className="truncate">{m.profile?.display_name ?? m.email ?? m.user_id}</div>
+															{m.email ? <div className="text-xs text-neutral-500 truncate">{m.email}</div> : null}
+														</div>
+														{m.pending ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">Pendente</span> : null}
+													</div>
 												</td>
 												<td className="px-3 py-2">
 													<select className="border rounded px-2 py-1" value={m.role} onChange={(e) => updateRole(m.user_id, e.target.value as any)}>
@@ -279,13 +291,70 @@ export default function DashboardPage() {
 														<option value="viewer">Observador</option>
 													</select>
 												</td>
-												<td className="px-3 py-2 text-right">
-													<Button variant="ghost" size="sm" onClick={() => removeMember(m.user_id)}>Remover</Button>
+												<td className="px-3 pr-4 py-2 text-right whitespace-nowrap">
+													<div className="flex gap-2 justify-end flex-wrap w-full">
+														{m.pending ? (
+															<Button
+																variant="ghost"
+																size="sm"
+																onClick={async () => {
+																	const r = await fetch('/api/workspaces/members/resend', {
+																		method: 'POST',
+																		headers: { 'Content-Type': 'application/json' },
+																		body: JSON.stringify({ user_id: m.user_id, email: m.email }),
+																	});
+																	const j = await r.json();
+																	if (j?.action_link) {
+																		try {
+																			await navigator.clipboard.writeText(j.action_link);
+																			alert('Convite reenviado. Link copiado para a área de transferência.');
+																		} catch {
+																			prompt('Convite reenviado. Copie o link:', j.action_link);
+																		}
+																	} else {
+																		alert('Convite reenviado.');
+																	}
+																}}
+															>
+																Reenviar
+															</Button>
+														) : null}
+														{m.pending ? (
+															<Button
+																variant="ghost"
+																size="sm"
+																onClick={async () => {
+																	const res = await fetch('/api/workspaces/members/invite', {
+																		method: 'POST',
+																		headers: { 'Content-Type': 'application/json' },
+																		body: JSON.stringify({ email: m.email }),
+																	});
+																	const json = await res.json();
+																	if (json?.action_link) {
+																		try {
+																			await navigator.clipboard.writeText(json.action_link);
+																			alert('Link de convite copiado para a área de transferência.');
+																		} catch {
+																			prompt('Copie o link abaixo:', json.action_link);
+																		}
+																	} else if (json?.ok) {
+																		alert('Convite reenviado.');
+																	} else if (json?.error) {
+																		alert(json.error);
+																	}
+																}}
+															>
+																Copiar
+															</Button>
+														) : null}
+														<Button variant="ghost" size="sm" onClick={() => removeMember(m.user_id)}>Remover</Button>
+													</div>
 												</td>
 											</tr>
 										))}
 									</tbody>
 								</table>
+								</div>
 							)}
 						</div>
 					</div>

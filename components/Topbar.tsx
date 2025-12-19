@@ -7,6 +7,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 import { Avatar } from "@/components/ui/Avatar";
 import { Popover } from "@/components/ui/Popover";
 import * as React from "react";
+import { usePathname } from "next/navigation";
 
 export function Topbar() {
   const supabase = useMemo(() => getSupabaseBrowserClient() as any, []);
@@ -17,6 +18,13 @@ export function Topbar() {
   const [menuView, setMenuView] = useState<'root' | 'workspaces'>('root');
   const [workspaces, setWorkspaces] = useState<{ id: string; name: string }[]>([]);
   const [wsLoading, setWsLoading] = useState(false);
+  const pathname = usePathname();
+  const currentBoardId = React.useMemo(() => {
+    const parts = (pathname || "").split("/").filter(Boolean);
+    const idx = parts.findIndex((p) => p === "boards");
+    if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+    return null;
+  }, [pathname]);
 
   useEffect(() => {
     let mounted = true;
@@ -65,6 +73,7 @@ export function Topbar() {
             >
               <Settings size={14} /> <span>Configurações</span>
             </Link>
+            {/* Atividade agora vive no menu do board (BoardPageView) */}
           </nav>
           <button
             className="h-9 w-9 inline-flex items-center justify-center rounded-full border hover:bg-neutral-50"
@@ -191,6 +200,7 @@ export function Topbar() {
             ) : null}
           </Popover>
         </div>
+        {/* Modal de atividade removido daqui */}
       </div>
     </div>
   );

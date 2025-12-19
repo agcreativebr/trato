@@ -14,11 +14,25 @@ export async function GET(req: NextRequest) {
 		.eq('workspace_id', workspaceId);
 	if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 	let profiles: Record<string, any> = {};
+	let usersById: Record<string, any> = {};
 	try {
 		const { data: profs } = await supabase.from('user_profiles').select('id, display_name, avatar_url').in('id', (members ?? []).map((m: any) => m.user_id));
 		profiles = Object.fromEntries((profs ?? []).map((p: any) => [p.id, p]));
+		// pega status/email dos usuários (para exibir "Pendente")
+		try {
+			const { data: page } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 });
+			const all = page?.users ?? [];
+			for (const u of all) {
+				usersById[u.id] = u;
+			}
+		} catch {}
 	} catch {}
-	const result = (members ?? []).map((m: any) => ({ user_id: m.user_id, role: m.role, profile: profiles[m.user_id] ?? null }));
+	const result = (members ?? []).map((m: any) => {
+		const u = usersById[m.user_id];
+		const email = u?.email ?? null;
+		const pending = !u?.email_confirmed_at && !u?.confirmed_at;
+		return { user_id: m.user_id, role: m.role, email, pending, profile: profiles[m.user_id] ?? null };
+	});
 	return NextResponse.json({ data: result });
 }
 
@@ -39,9 +53,29 @@ export async function POST(req: NextRequest) {
 			if (adminErr) throw adminErr;
 			const found = (usersPage?.users ?? []).find((u: any) => (u.email ?? '').toLowerCase() === String(email).toLowerCase());
 			if (!found) {
-				return NextResponse.json({ error: 'Usuário não encontrado para este e-mail.' }, { status: 404 });
+				// Não existe: envia convite e cria o usuário
+				try {
+					const { data: invite } = await supabase.auth.admin.inviteUserByEmail(String(email));
+					targetUserId = invite?.user?.id;
+				} catch (e) {
+					// fallback: cria o usuário sem confirmar (envia e-mail padrão)
+					const { data: created } = await supabase.auth.admin.createUser({
+						email: String(email),
+						email_confirm: false,
+					});
+					targetUserId = created?.user?.id;
+				}
+				if (!targetUserId) {
+					return NextResponse.json({ error: 'Falha ao convidar/criar usuário para este e-mail.' }, { status: 400 });
+				}
+				// garante um perfil básico
+				try {
+					const display = String(email).split('@')[0];
+					await supabase.from('user_profiles').upsert({ id: targetUserId, display_name: display } as any, { onConflict: 'id' });
+				} catch {}
+			} else {
+				targetUserId = found.id;
 			}
-			targetUserId = found.id;
 		} catch (e: any) {
 			return NextResponse.json({ error: e?.message ?? 'Falha ao consultar usuários' }, { status: 400 });
 		}

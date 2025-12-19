@@ -203,29 +203,20 @@ export function CardModal({
       setAttachments(attsRes.data ?? []);
       setComments(cmsRes.data ?? []);
       setCardMemberIds(((cmRes.data ?? []) as any[]).map((x) => x.user_id));
-      // workspace members
+      // workspace members (via API com service role) para incluir pendentes
       try {
         const wsId = (wsRes.data as any)?.workspace_id as string | undefined;
         if (wsId) {
-          const { data: wm } = await supabase
-            .from("workspace_members")
-            .select("user_id")
-            .eq("workspace_id", wsId);
-          const ids = Array.from(new Set((wm ?? []).map((x: any) => x.user_id)));
-          if (ids.length) {
-            const { data: profs } = await supabase
-              .from("user_profiles")
-              .select("id, display_name")
-              .in("id", ids);
-            setWorkspaceMembers(
-              (profs ?? []).map((p: any) => ({
-                id: p.id,
-                display_name: p.display_name ?? null,
-              }))
-            );
-          } else {
-            setWorkspaceMembers([]);
-          }
+          const { authFetch } = await import("@/lib/auth-fetch");
+          const res = await authFetch(`/api/workspaces/members?workspaceId=${wsId}`);
+          const json = await res.json();
+          const arr = (json?.data ?? []) as any[];
+          setWorkspaceMembers(
+            arr.map((m: any) => ({
+              id: m.user_id,
+              display_name: m?.profile?.display_name ?? m?.email ?? null,
+            }))
+          );
         }
       } catch {}
       // autores de comentários
@@ -1071,7 +1062,7 @@ export function CardModal({
                   </div>
                 </div>
                 {membersPanelOpen && (
-                  <div className="border rounded-md p-3">
+                  <div className="border rounded-md p-3 w-full">
                     <div className="text-sm font-medium mb-2">Membros do cartão</div>
                     <div className="flex items-center gap-2 mb-2">
                       <Button
@@ -1092,14 +1083,14 @@ export function CardModal({
                         Atribuir-me
                       </Button>
                     </div>
-                    <div className="max-h-64 overflow-auto space-y-1">
+                    <div className="max-h-64 overflow-auto grid grid-cols-2 gap-2 pr-1">
                       {workspaceMembers.length === 0 ? (
                         <div className="text-sm text-neutral-500">Nenhum membro no workspace.</div>
                       ) : (
                         workspaceMembers.map((m) => {
                           const checked = cardMemberIds.includes(m.id);
                           return (
-                            <label key={m.id} className="flex items-center justify-between px-2 py-1 rounded hover:bg-neutral-50 text-sm">
+                            <label key={m.id} className="flex items-center justify-between px-2 py-1 rounded hover:bg-neutral-50 text-sm w-full">
                               <span className="truncate">{m.display_name ?? m.id}</span>
                               <input
                                 type="checkbox"

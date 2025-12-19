@@ -721,10 +721,17 @@ export function KanbanBoard({
       const nextPos =
         toIndex < next.length - 1 ? next[toIndex + 1].position : undefined;
       const newPos = computePosition(prevPos, nextPos);
-      await supabase
-        .from("lists")
-        .update({ position: newPos })
-        .eq("id", moved.id);
+      try {
+        const { authFetch } = await import("@/lib/auth-fetch");
+        await authFetch("/api/lists/reorder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ board_id: boardId, list_id: moved.id, to_index: toIndex, new_position: newPos }),
+        });
+      } catch {
+        // fallback direto (sem auditoria)
+        await supabase.from("lists").update({ position: newPos }).eq("id", moved.id);
+      }
       return;
     }
     // Reordenar listas
@@ -743,10 +750,16 @@ export function KanbanBoard({
           const nextPos =
             toIndex < next.length - 1 ? next[toIndex + 1].position : undefined;
           const newPos = computePosition(prevPos, nextPos);
-          await supabase
-            .from("lists")
-            .update({ position: newPos })
-            .eq("id", moved.id);
+          try {
+            const { authFetch } = await import("@/lib/auth-fetch");
+            await authFetch("/api/lists/reorder", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ board_id: boardId, list_id: moved.id, to_index: toIndex, new_position: newPos }),
+            });
+          } catch {
+            await supabase.from("lists").update({ position: newPos }).eq("id", moved.id);
+          }
         }
       }
       return;

@@ -3,7 +3,7 @@
   "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
   "/(app)/workspaces/[workspaceId]/boards/[boardId]/page": "app/(app)/workspaces/[workspaceId]/boards/[boardId]/page.js",
   "/(auth)/login/page": "app/(auth)/login/page.js",
-  "/api/user_profiles/sync/route": "app/api/user_profiles/sync/route.js",
   "/api/workspaces/members/route": "app/api/workspaces/members/route.js",
-  "/api/cards/move/route": "app/api/cards/move/route.js"
+  "/api/lists/reorder/route": "app/api/lists/reorder/route.js",
+  "/api/boards/audit/route": "app/api/boards/audit/route.js"
 }
